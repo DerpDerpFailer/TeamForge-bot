@@ -1,5 +1,6 @@
 const { Events } = require('discord.js');
-const logger = require('../utils/logger');
+const logger        = require('../utils/logger');
+const wizardHandler = require('../handlers/wizardHandler');
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -13,10 +14,7 @@ module.exports = {
 
       if (!command) {
         logger.warn(`Commande inconnue reçue : /${interaction.commandName}`);
-        return interaction.reply({
-          content: '❌ Commande introuvable.',
-          ephemeral: true,
-        });
+        return interaction.reply({ content: '❌ Commande introuvable.', ephemeral: true });
       }
 
       try {
@@ -24,9 +22,7 @@ module.exports = {
         await command.execute(interaction, client);
       } catch (error) {
         logger.error(`Erreur lors de /${interaction.commandName} : ${error.message}`);
-
         const errorMsg = { content: '❌ Une erreur est survenue.', ephemeral: true };
-
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp(errorMsg);
         } else {
@@ -36,7 +32,28 @@ module.exports = {
       return;
     }
 
-    // ── Boutons (géré dans les prochaines étapes) ────────────────────────────
+    // ── Interactions du wizard ───────────────────────────────────────────────
+    const customId  = interaction.customId ?? '';
+    const isWizard  = customId.startsWith('wizard_');
+
+    if (isWizard) {
+      try {
+        await wizardHandler.handle(interaction);
+      } catch (err) {
+        logger.error(`Erreur wizard [${customId}] : ${err.message}`);
+        const msg = { content: '❌ Une erreur est survenue dans le wizard.', ephemeral: true };
+        try {
+          if (interaction.replied || interaction.deferred) {
+            await interaction.followUp(msg);
+          } else {
+            await interaction.reply(msg);
+          }
+        } catch (_) { /* interaction expirée */ }
+      }
+      return;
+    }
+
+    // ── Boutons des équipes (Étape 4) ────────────────────────────────────────
     if (interaction.isButton()) {
       // À compléter — Étape 4
       return;
