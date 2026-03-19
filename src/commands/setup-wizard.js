@@ -7,7 +7,7 @@ const {
   ButtonStyle,
 } = require('discord.js');
 
-const { getConfig }               = require('../../data/configService');
+const { getConfig }               = require('../services/configService');
 const { buildTeamCountPayload }   = require('../handlers/wizardHandler');
 const logger                      = require('../utils/logger');
 
