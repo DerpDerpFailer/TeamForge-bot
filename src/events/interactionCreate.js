@@ -1,6 +1,7 @@
 const { Events } = require('discord.js');
 const logger        = require('../utils/logger');
 const wizardHandler = require('../handlers/wizardHandler');
+const teamHandler   = require('../handlers/teamHandler');
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -33,10 +34,9 @@ module.exports = {
     }
 
     // ── Interactions du wizard ───────────────────────────────────────────────
-    const customId  = interaction.customId ?? '';
-    const isWizard  = customId.startsWith('wizard_');
+    const customId = interaction.customId ?? '';
 
-    if (isWizard) {
+    if (customId.startsWith('wizard_')) {
       try {
         await wizardHandler.handle(interaction);
       } catch (err) {
@@ -53,9 +53,21 @@ module.exports = {
       return;
     }
 
-    // ── Boutons des équipes (Étape 4) ────────────────────────────────────────
-    if (interaction.isButton()) {
-      // À compléter — Étape 4
+    // ── Boutons des équipes ──────────────────────────────────────────────────
+    if (interaction.isButton() && customId.startsWith('team_')) {
+      try {
+        await teamHandler.handle(interaction);
+      } catch (err) {
+        logger.error(`Erreur teamHandler [${customId}] : ${err.message}`);
+        const msg = { content: '❌ Une erreur est survenue.', ephemeral: true };
+        try {
+          if (interaction.replied || interaction.deferred) {
+            await interaction.followUp(msg);
+          } else {
+            await interaction.reply(msg);
+          }
+        } catch (_) { /* interaction expirée */ }
+      }
       return;
     }
   },
