@@ -1,7 +1,6 @@
-const { EmbedBuilder }          = require('discord.js');
-const { getConfig }             = require('../services/configService');
+const { getConfig }                        = require('../services/configService');
 const { buildTeamButtons, buildTeamsEmbed } = require('../utils/teamEmbed');
-const logger                    = require('../utils/logger');
+const logger                                = require('../utils/logger');
 
 /**
  * Point d'entrée — appelé quand un membre clique sur un bouton team_X
@@ -29,7 +28,7 @@ async function handle(interaction) {
     });
   }
 
-  // ── Vérifier si la team est pleine ──────────────────────────────────────
+  // ── Récupérer le rôle et vérifier s'il existe ───────────────────────────
   const role = await guild.roles.fetch(team.roleId).catch(() => null);
 
   if (!role) {
@@ -39,6 +38,7 @@ async function handle(interaction) {
     });
   }
 
+  // ── Vérifier si la team est pleine ──────────────────────────────────────
   await guild.members.fetch();
   const currentCount = role.members.size;
 
@@ -50,7 +50,7 @@ async function handle(interaction) {
   }
 
   // ── Retirer tous les anciens rôles Team ─────────────────────────────────
-  const teamRoleIds = config.teams.map(t => t.roleId).filter(Boolean);
+  const teamRoleIds   = config.teams.map(t => t.roleId).filter(Boolean);
   const rolesToRemove = member.roles.cache.filter(r => teamRoleIds.includes(r.id));
 
   if (rolesToRemove.size > 0) {
@@ -60,13 +60,15 @@ async function handle(interaction) {
   }
 
   // ── Ajouter le nouveau rôle ──────────────────────────────────────────────
-  await member.roles.add(team.roleId).catch(err => {
+  try {
+    await member.roles.add(team.roleId);
+  } catch (err) {
     logger.error(`Impossible d'ajouter le rôle ${team.name} à ${member.user.tag} : ${err.message}`);
     return interaction.reply({
       content: '❌ Impossible d\'ajouter le rôle. Vérifie la hiérarchie des rôles.',
       ephemeral: true,
     });
-  });
+  }
 
   logger.success(`${member.user.tag} a rejoint ${team.emoji} ${team.name}`);
 
