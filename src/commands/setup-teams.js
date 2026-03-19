@@ -1,7 +1,7 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const { buildTeamButtons, buildTeamsEmbed }        = require('../utils/teamEmbed');
-const { saveSetupMessage, getConfig }              = require('../services/configService');
-const logger                                        = require('../utils/logger');
+const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
+const { buildTeamButtons, buildTeamsEmbed }                      = require('../utils/teamEmbed');
+const { saveSetupMessage, getConfig }                            = require('../services/configService');
+const logger                                                      = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -10,7 +10,7 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const config = getConfig();
 
