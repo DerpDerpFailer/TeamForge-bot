@@ -1,0 +1,26 @@
+services:
+  teamforge:
+    build: .
+    container_name: teamforge
+    restart: unless-stopped
+
+    # Variables d'environnement (à renseigner dans Portainer)
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - CLIENT_ID=${CLIENT_ID}
+      - GUILD_ID=${GUILD_ID}
+
+    # Persistance des données JSON
+    volumes:
+      - teamforge_data:/app/data
+
+    # Logs lisibles
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  teamforge_data:
+    driver: local
