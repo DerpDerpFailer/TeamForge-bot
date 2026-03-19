@@ -22,19 +22,18 @@ async function handle(interaction) {
   if (interaction.isButton()) {
     const id = interaction.customId;
 
-    if (id === 'wizard_overwrite_confirm') return handleOverwriteConfirm(interaction);
-    if (id === 'wizard_overwrite_cancel')  return handleCancel(interaction);
-    if (id.startsWith('wizard_count_'))    return handleCountSelect(interaction);
-    if (id.startsWith('wizard_edit_team_'))return handleEditTeam(interaction);
-    if (id === 'wizard_confirm')           return handleConfirm(interaction);
-    if (id === 'wizard_cancel')            return handleCancel(interaction);
+    if (id === 'wizard_overwrite_confirm')  return handleOverwriteConfirm(interaction);
+    if (id === 'wizard_overwrite_cancel')   return handleCancel(interaction);
+    if (id === 'wizard_count_open_modal')   return handleCountModal(interaction);
+    if (id.startsWith('wizard_edit_team_')) return handleEditTeam(interaction);
+    if (id === 'wizard_confirm')            return handleConfirm(interaction);
+    if (id === 'wizard_cancel')             return handleCancel(interaction);
   }
 
   // ── Modals ───────────────────────────────────────────────────────────────
   if (interaction.isModalSubmit()) {
-    if (interaction.customId.startsWith('wizard_team_modal_')) {
-      return handleTeamModalSubmit(interaction);
-    }
+    if (interaction.customId === 'wizard_count_modal')         return handleCountModalSubmit(interaction);
+    if (interaction.customId.startsWith('wizard_team_modal_')) return handleTeamModalSubmit(interaction);
   }
 
   // ── Role Select Menus ────────────────────────────────────────────────────
@@ -55,11 +54,45 @@ async function handleOverwriteConfirm(interaction) {
   return interaction.update(buildTeamCountPayload());
 }
 
-// ── Sélection du nombre d'équipes ─────────────────────────────────────────
-async function handleCountSelect(interaction) {
-  const count   = parseInt(interaction.customId.split('_')[2]);
+// ── Ouverture du modal de saisie du nombre d'équipes ─────────────────────
+async function handleCountModal(interaction) {
+  const modal = new ModalBuilder()
+    .setCustomId('wizard_count_modal')
+    .setTitle('Nombre d\'équipes');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('team_count')
+        .setLabel('Nombre d\'équipes (1 à 12)')
+        .setStyle(TextInputStyle.Short)
+        .setMinLength(1)
+        .setMaxLength(2)
+        .setPlaceholder('Ex : 4')
+        .setRequired(true)
+    )
+  );
+
+  return interaction.showModal(modal);
+}
+
+// ── Traitement du modal de nombre d'équipes ───────────────────────────────
+async function handleCountModalSubmit(interaction) {
+  const raw   = interaction.fields.getTextInputValue('team_count').trim();
+  const count = parseInt(raw);
+
+  if (isNaN(count) || count < 1 || count > 12) {
+    return interaction.reply({
+      content: '❌ Le nombre d\'équipes doit être entre **1 et 12**.',
+      ephemeral: true,
+    });
+  }
+
   const session = wizardService.createSession(interaction.user.id, count);
-  return interaction.update(buildTeamConfigPayload(session, 0));
+
+  // Le modal ne peut pas faire update() → deferReply + editReply
+  await interaction.deferReply({ ephemeral: true });
+  return interaction.editReply(buildTeamConfigPayload(session, 0));
 }
 
 // ── Ouverture du modal de configuration d'une équipe ─────────────────────
@@ -110,11 +143,10 @@ async function handleEditTeam(interaction) {
     ),
   );
 
-  // showModal() est la réponse à l'interaction — pas d'update/reply séparé
   return interaction.showModal(modal);
 }
 
-// ── Traitement du modal soumis ────────────────────────────────────────────
+// ── Traitement du modal de configuration d'équipe ────────────────────────
 async function handleTeamModalSubmit(interaction) {
   const index   = parseInt(interaction.customId.split('_')[3]);
   const session = wizardService.getSession(interaction.user.id);
@@ -143,16 +175,14 @@ async function handleTeamModalSubmit(interaction) {
   wizardService.updateTeam(interaction.user.id, index, { name, emoji, maxPlayers: max });
   session.teams[index] = { ...session.teams[index], name, emoji, maxPlayers: max };
 
-  // Le modal ne peut pas faire update() → on crée une nouvelle réponse éphémère
+  // Le modal ne peut pas faire update() → deferReply + editReply
   await interaction.deferReply({ ephemeral: true });
 
   const nextIndex = index + 1;
 
   if (nextIndex < session.teamCount) {
-    // Équipe suivante à configurer
     return interaction.editReply(buildTeamConfigPayload(session, nextIndex));
   } else {
-    // Toutes les équipes configurées → sélection des rôles
     return interaction.editReply(buildRoleSelectionPayload(session, 0));
   }
 }
@@ -193,10 +223,9 @@ async function handleConfirm(interaction) {
     });
   }
 
-  // Écraser la configuration dans data/config.json
   const config          = getConfig();
   config.teams          = session.teams;
-  config.setupMessageId = ''; // reset : /setup-teams devra être relancé
+  config.setupMessageId = '';
   config.setupChannelId = '';
   saveConfig(config);
 
@@ -237,26 +266,24 @@ async function handleCancel(interaction) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// BUILDERS — construisent les payloads (embeds + composants)
+// BUILDERS
 // ════════════════════════════════════════════════════════════════════════════
 
-// ── Étape 1 : sélection du nombre d'équipes ───────────────────────────────
+// ── Étape 1 : bouton → ouvre le modal de saisie ───────────────────────────
 function buildTeamCountPayload() {
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle('🧙 Setup Wizard — Étape 1/3')
     .setDescription(
       '**Combien d\'équipes veux-tu configurer ?**\n\n' +
-      'Tu pourras ensuite définir le nom, l\'emoji et le nombre de joueurs max pour chacune.'
+      'Clique sur le bouton ci-dessous et entre un nombre entre **1 et 12**.'
     );
 
   const row = new ActionRowBuilder().addComponents(
-    ...[2, 3, 4, 5, 6].map(n =>
-      new ButtonBuilder()
-        .setCustomId(`wizard_count_${n}`)
-        .setLabel(`${n} équipes`)
-        .setStyle(ButtonStyle.Primary)
-    )
+    new ButtonBuilder()
+      .setCustomId('wizard_count_open_modal')
+      .setLabel('⚙️ Définir le nombre d\'équipes')
+      .setStyle(ButtonStyle.Primary)
   );
 
   return { embeds: [embed], components: [row] };
@@ -266,7 +293,6 @@ function buildTeamCountPayload() {
 function buildTeamConfigPayload(session, index) {
   const total = session.teamCount;
 
-  // Récapitulatif des équipes déjà configurées
   const doneList = session.teams
     .slice(0, index)
     .map(t => `${t.emoji} **${t.name}** — ${t.maxPlayers} joueurs max ✅`)
@@ -298,8 +324,8 @@ function buildRoleSelectionPayload(session, index) {
 
   const progression = session.teams
     .map((t, i) => {
-      if (i < index)    return `${t.emoji} **${t.name}** → <@&${t.roleId}> ✅`;
-      if (i === index)  return `${t.emoji} **${t.name}** ← *sélection en cours*`;
+      if (i < index)   return `${t.emoji} **${t.name}** → <@&${t.roleId}> ✅`;
+      if (i === index) return `${t.emoji} **${t.name}** ← *sélection en cours*`;
       return `${t.emoji} **${t.name}** ← *à venir*`;
     })
     .join('\n');
