@@ -1,5 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { getConfig } = require('../../data/configService');
+const { getConfig } = require('../services/configService');
 
 /**
  * Construit les boutons de sélection de team

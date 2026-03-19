@@ -10,7 +10,7 @@ const {
 } = require('discord.js');
 
 const wizardService               = require('../services/wizardService');
-const { getConfig, saveConfig }   = require('../../data/configService');
+const { getConfig, saveConfig }   = require('../services/configService');
 const logger                      = require('../utils/logger');
 
 // ════════════════════════════════════════════════════════════════════════════
