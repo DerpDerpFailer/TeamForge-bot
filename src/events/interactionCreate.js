@@ -5,6 +5,7 @@ const teamHandler                            = require('../handlers/teamHandler'
 const { buildTeamButtons, buildTeamsEmbed }  = require('../utils/teamEmbed');
 const { getConfig, saveSetupMessage, saveConfig } = require('../services/configService');
 const { startCron }                          = require('../services/cronService');
+const { t }                                  = require('../utils/i18n');
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -17,16 +18,16 @@ module.exports = {
       const command = client.commands.get(interaction.commandName);
 
       if (!command) {
-        logger.warn(`Commande inconnue reçue : /${interaction.commandName}`);
-        return interaction.reply({ content: '❌ Commande introuvable.', flags: MessageFlags.Ephemeral });
+        logger.warn(`Unknown command received: /${interaction.commandName}`);
+        return interaction.reply({ content: t('general.unknownCommand'), flags: MessageFlags.Ephemeral });
       }
 
       try {
-        logger.cmd(`/${interaction.commandName} exécutée par ${interaction.user.tag}`);
+        logger.cmd(`/${interaction.commandName} executed by ${interaction.user.tag}`);
         await command.execute(interaction, client);
       } catch (error) {
-        logger.error(`Erreur lors de /${interaction.commandName} : ${error.message}`);
-        const errorMsg = { content: '❌ Une erreur est survenue.', flags: MessageFlags.Ephemeral };
+        logger.error(`Error on /${interaction.commandName}: ${error.message}`);
+        const errorMsg = { content: t('general.error'), flags: MessageFlags.Ephemeral };
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp(errorMsg);
         } else {
@@ -45,9 +46,7 @@ module.exports = {
       const config = getConfig();
 
       if (!config.teams || config.teams.length === 0) {
-        return interaction.editReply({
-          content: '❌ Aucune équipe configurée. Lance d\'abord `/setup-wizard`.',
-        });
+        return interaction.editReply({ content: t('setupTeams.noTeamsConfigured') });
       }
 
       try {
@@ -56,7 +55,6 @@ module.exports = {
         const roleNameRaw = interaction.fields.getTextInputValue('panel_role_name').trim();
         const guild       = interaction.guild;
 
-        // ── Résolution du rôle par son nom ──────────────────────────────────
         let roleMention = null;
 
         if (roleNameRaw) {
@@ -72,12 +70,12 @@ module.exports = {
 
             if (!role) {
               return interaction.editReply({
-                content: `❌ Rôle \`${roleNameRaw}\` introuvable. Vérifie le nom et réessaie.`,
+                content: t('setupTeams.roleNotFound', { role: roleNameRaw }),
               });
             }
 
             roleMention = `<@&${role.id}>`;
-            logger.info(`Mention du rôle : ${role.name} (${role.id})`);
+            logger.info(`Role mention: ${role.name} (${role.id})`);
           }
         }
 
@@ -91,13 +89,12 @@ module.exports = {
         });
 
         saveSetupMessage(message.id, interaction.channel.id);
+        logger.success(t('setupTeams.logSent', { user: interaction.user.tag, channel: interaction.channel.name }));
 
-        logger.success(`Panneau envoyé par ${interaction.user.tag} dans #${interaction.channel.name}`);
-
-        return interaction.editReply({ content: '✅ Panneau des équipes envoyé avec succès !' });
+        return interaction.editReply({ content: t('setupTeams.success') });
       } catch (err) {
-        logger.error(`Erreur setup_teams_modal : ${err.message}`);
-        return interaction.editReply({ content: '❌ Une erreur est survenue.' });
+        logger.error(`Error setup_teams_modal: ${err.message}`);
+        return interaction.editReply({ content: t('general.error') });
       }
     }
 
@@ -107,43 +104,32 @@ module.exports = {
 
       const raw = interaction.fields.getTextInputValue('reset_time').trim();
 
-      // Validation HH:MM
       if (!/^\d{1,2}:\d{2}$/.test(raw)) {
-        return interaction.editReply({
-          content: '❌ Format invalide. Utilise **HH:MM** (ex: `03:00`, `14:30`).',
-        });
+        return interaction.editReply({ content: t('setResetTime.invalidFormat') });
       }
 
       const [h, m] = raw.split(':').map(Number);
       if (h < 0 || h > 23 || m < 0 || m > 59) {
-        return interaction.editReply({
-          content: '❌ Heure invalide. Heures : 0–23, Minutes : 0–59.',
-        });
+        return interaction.editReply({ content: t('setResetTime.invalidTime') });
       }
 
-      // Sauvegarder dans config.json
       const config     = getConfig();
       config.resetTime = raw;
       saveConfig(config);
-
-      // Redémarrer le cron
       startCron(client, raw);
 
-      logger.success(`Heure de reset modifiée par ${interaction.user.tag} → ${raw}`);
+      logger.success(t('setResetTime.logSuccess', { user: interaction.user.tag, time: raw }));
 
-      return interaction.editReply({
-        content: `✅ Reset automatique configuré à **${raw}** (Europe/Paris) !`,
-      });
+      return interaction.editReply({ content: t('setResetTime.success', { time: raw }) });
     }
 
     // ── Interactions du wizard ───────────────────────────────────────────────
     if (customId.startsWith('wizard_')) {
-      // Bouton spécial : ouvrir modal heure de reset (étape 4)
       if (interaction.isButton() && customId === 'wizard_reset_time_open_modal') {
         try {
           await wizardHandler.handleResetTimeModal(interaction);
         } catch (err) {
-          logger.error(`Erreur wizard reset time modal : ${err.message}`);
+          logger.error(`Error wizard reset time modal: ${err.message}`);
         }
         return;
       }
@@ -151,15 +137,15 @@ module.exports = {
       try {
         await wizardHandler.handle(interaction);
       } catch (err) {
-        logger.error(`Erreur wizard [${customId}] : ${err.message}`);
-        const msg = { content: '❌ Une erreur est survenue dans le wizard.', flags: MessageFlags.Ephemeral };
+        logger.error(`Error wizard [${customId}]: ${err.message}`);
+        const msg = { content: t('general.error'), flags: MessageFlags.Ephemeral };
         try {
           if (interaction.replied || interaction.deferred) {
             await interaction.followUp(msg);
           } else {
             await interaction.reply(msg);
           }
-        } catch (_) { /* interaction expirée */ }
+        } catch (_) { /* expired */ }
       }
       return;
     }
@@ -169,15 +155,15 @@ module.exports = {
       try {
         await teamHandler.handle(interaction);
       } catch (err) {
-        logger.error(`Erreur teamHandler [${customId}] : ${err.message}`);
-        const msg = { content: '❌ Une erreur est survenue.', flags: MessageFlags.Ephemeral };
+        logger.error(`Error teamHandler [${customId}]: ${err.message}`);
+        const msg = { content: t('general.error'), flags: MessageFlags.Ephemeral };
         try {
           if (interaction.replied || interaction.deferred) {
             await interaction.followUp(msg);
           } else {
             await interaction.reply(msg);
           }
-        } catch (_) { /* interaction expirée */ }
+        } catch (_) { /* expired */ }
       }
       return;
     }

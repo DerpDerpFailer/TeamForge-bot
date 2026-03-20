@@ -1,25 +1,24 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { getConfig } = require('../services/configService');
+const { t }         = require('./i18n');
 
 /**
  * Calcule la disposition optimale des boutons par ligne.
  */
 function computeLayout(total) {
   if (total <= 5) return { perRow: total };
-
   let divisor = 2;
   while (divisor <= total) {
     const perRow = Math.ceil(total / divisor);
     if (perRow <= 5) return { perRow };
     divisor++;
   }
-
   return { perRow: 5 };
 }
 
 /**
  * Construit les lignes de boutons de sélection de team
- * + une dernière ligne avec le bouton "Quitter mon équipe" en rouge.
+ * + une dernière ligne avec le bouton "Quitter" en rouge.
  * @returns {ActionRowBuilder[]}
  */
 function buildTeamButtons() {
@@ -51,12 +50,11 @@ function buildTeamButtons() {
     if (current.components.length > 0) rows.push(current);
   }
 
-  // ── Bouton "Quitter mon équipe" sur une ligne séparée ───────────────────
   rows.push(
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId('team_leave')
-        .setLabel('🚪 Quitter mon équipe')
+        .setLabel(t('embed.leaveButton'))
         .setStyle(ButtonStyle.Danger),
     )
   );
@@ -65,24 +63,20 @@ function buildTeamButtons() {
 }
 
 /**
- * Fetch les membres du serveur uniquement si le cache est insuffisant.
- * Évite les rate limits sur les appels répétés.
- * @param {Guild} guild
+ * Fetch les membres uniquement si le cache est insuffisant.
  */
 async function ensureMemberCache(guild) {
-  // Si le cache contient déjà des membres, on ne re-fetch pas
   if (guild.members.cache.size > 1) return;
   await guild.members.fetch();
 }
 
 /**
- * Construit l'embed principal qui affiche les teams et leurs membres.
+ * Construit l'embed principal des équipes.
  *
- * @param {Guild}   guild          - Le serveur Discord
- * @param {boolean} fetchMembers   - Si true, force un fetch si le cache est vide
- * @param {string}  [title]        - Titre personnalisé (optionnel)
- * @param {string}  [description]  - Description personnalisée (optionnelle)
- * @returns {Promise<EmbedBuilder>}
+ * @param {Guild}   guild
+ * @param {boolean} fetchMembers
+ * @param {string}  [title]
+ * @param {string}  [description]
  */
 async function buildTeamsEmbed(guild, fetchMembers = false, title = null, description = null) {
   const config = getConfig();
@@ -93,21 +87,16 @@ async function buildTeamsEmbed(guild, fetchMembers = false, title = null, descri
 
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
-    .setTitle(title ?? '⚔️ TeamForge — Sélection des équipes')
-    .setDescription(
-      description ??
-      'Clique sur un bouton pour rejoindre une équipe.\n' +
-      'Tu ne peux appartenir qu\'à **une seule équipe** à la fois.\n' +
-      'Clique sur 🚪 **Quitter mon équipe** pour te retirer.'
-    )
+    .setTitle(title ?? t('embed.title'))
+    .setDescription(description ?? t('embed.description'))
     .setTimestamp()
-    .setFooter({ text: 'TeamForge • Mis à jour' });
+    .setFooter({ text: t('embed.footer') });
 
   for (const team of config.teams) {
     if (!team.roleId) {
       embed.addFields({
         name:   `${team.emoji} ${team.name} (0/${team.maxPlayers})`,
-        value:  '⚙️ Rôle non configuré',
+        value:  t('embed.roleNotSet'),
         inline: false,
       });
       continue;
@@ -118,7 +107,7 @@ async function buildTeamsEmbed(guild, fetchMembers = false, title = null, descri
     if (!role) {
       embed.addFields({
         name:   `${team.emoji} ${team.name} (0/${team.maxPlayers})`,
-        value:  '❌ Rôle introuvable',
+        value:  t('embed.roleNotFound'),
         inline: false,
       });
       continue;
@@ -127,7 +116,7 @@ async function buildTeamsEmbed(guild, fetchMembers = false, title = null, descri
     const members  = role.members;
     const count    = members.size;
     let memberList = members.map(m => `• ${m}`).join('\n');
-    if (!memberList) memberList = '*Aucun membre*';
+    if (!memberList) memberList = t('embed.noMembers');
 
     embed.addFields({
       name:   `${team.emoji} ${team.name} (${count}/${team.maxPlayers})`,

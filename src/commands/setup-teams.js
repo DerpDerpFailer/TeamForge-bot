@@ -6,53 +6,49 @@ const {
   TextInputBuilder,
   TextInputStyle,
 } = require('discord.js');
-const logger = require('../utils/logger');
+const { t }    = require('../utils/i18n');
+const logger   = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('setup-teams')
-    .setDescription('📋 Envoie le panneau de sélection des équipes dans ce salon')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDescription('📋 Send the team selection panel in this channel'),
 
   async execute(interaction) {
     const modal = new ModalBuilder()
       .setCustomId('setup_teams_modal')
-      .setTitle('Personnaliser le panneau');
+      .setTitle(t('setupTeams.modalTitle'));
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
           .setCustomId('panel_title')
-          .setLabel('Titre du panneau')
+          .setLabel(t('setupTeams.fieldTitle'))
           .setStyle(TextInputStyle.Short)
-          .setValue('⚔️ TeamForge — Sélection des équipes')
+          .setValue(t('embed.title'))
           .setMaxLength(100)
           .setRequired(true)
       ),
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
           .setCustomId('panel_description')
-          .setLabel('Description')
+          .setLabel(t('setupTeams.fieldDescription'))
           .setStyle(TextInputStyle.Paragraph)
-          .setValue(
-            'Clique sur un bouton pour rejoindre une équipe.\n' +
-            'Tu ne peux appartenir qu\'à une seule équipe à la fois.\n' +
-            'Clique sur 🚪 Quitter mon équipe pour te retirer.'
-          )
+          .setValue(t('embed.description'))
           .setMaxLength(500)
           .setRequired(true)
       ),
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
           .setCustomId('panel_role_name')
-          .setLabel('Nom du rôle à mentionner (optionnel)')
+          .setLabel(t('setupTeams.fieldRoleName'))
           .setStyle(TextInputStyle.Short)
-          .setPlaceholder('Ex : @everyone  ou  Joueurs  —  Laisser vide pour ignorer')
+          .setPlaceholder(t('setupTeams.fieldRolePlaceholder'))
           .setRequired(false)
       ),
     );
 
-    logger.cmd(`/setup-teams modal ouvert par ${interaction.user.tag}`);
+    logger.cmd(`/setup-teams modal opened by ${interaction.user.tag}`);
     return interaction.showModal(modal);
   },
 };

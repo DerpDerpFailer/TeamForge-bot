@@ -1,13 +1,13 @@
 const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const { getConfig }           = require('../services/configService');
 const { refreshSetupMessage } = require('../handlers/teamHandler');
+const { t }                   = require('../utils/i18n');
 const logger                  = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('teams-status')
-    .setDescription('🔁 Force le rafraîchissement du panneau des équipes')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDescription('🔁 Force refresh the team panel'),
 
   async execute(interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -16,18 +16,16 @@ module.exports = {
     const guild  = interaction.guild;
 
     if (!config.setupMessageId) {
-      return interaction.editReply({
-        content: '❌ Aucun panneau actif. Lance `/setup-teams` d\'abord.',
-      });
+      return interaction.editReply({ content: t('teamsStatus.noPanel') });
     }
 
     try {
       await refreshSetupMessage(guild, config);
-      logger.success(`Panneau rafraîchi manuellement par ${interaction.user.tag}`);
-      return interaction.editReply({ content: '✅ Panneau rafraîchi avec succès !' });
+      logger.success(t('teamsStatus.logSuccess', { user: interaction.user.tag }));
+      return interaction.editReply({ content: t('teamsStatus.success') });
     } catch (err) {
-      logger.error(`Erreur /teams-status : ${err.message}`);
-      return interaction.editReply({ content: '❌ Une erreur est survenue.' });
+      logger.error(`Error /teams-status: ${err.message}`);
+      return interaction.editReply({ content: t('general.error') });
     }
   },
 };

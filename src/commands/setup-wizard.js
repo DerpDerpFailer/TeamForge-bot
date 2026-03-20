@@ -10,44 +10,40 @@ const {
 
 const { getConfig }             = require('../services/configService');
 const { buildTeamCountPayload } = require('../handlers/wizardHandler');
+const { t }                     = require('../utils/i18n');
 const logger                    = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('setup-wizard')
-    .setDescription('🧙 Configure les équipes TeamForge')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDescription('🧙 Configure TeamForge teams'),
 
   async execute(interaction) {
     const config            = getConfig();
     const hasExistingConfig = config.teams?.length > 0 && config.teams.some(t => t.roleId);
 
-    // ── Config existante → demander confirmation avant d'écraser ────────────
     if (hasExistingConfig) {
       const embed = new EmbedBuilder()
         .setColor(0xffa500)
-        .setTitle('⚠️ Configuration existante détectée')
-        .setDescription(
-          'Une configuration d\'équipes est déjà en place.\n\n' +
-          '**Veux-tu l\'écraser et tout reconfigurer ?**'
-        )
+        .setTitle(t('wizard.overwriteTitle'))
+        .setDescription(t('wizard.overwriteDescription'))
         .addFields(
-          config.teams.map(t => ({
-            name:   `${t.emoji} ${t.name}`,
-            value:  `Rôle : <@&${t.roleId}>\nMax : ${t.maxPlayers} joueurs`,
+          config.teams.map(team => ({
+            name:   `${team.emoji} ${team.name}`,
+            value:  t('wizard.existingRoleField', { roleId: team.roleId, max: team.maxPlayers }),
             inline: true,
           }))
         )
-        .setFooter({ text: '⚠️ Cette action est irréversible.' });
+        .setFooter({ text: t('wizard.overwriteFooter') });
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('wizard_overwrite_confirm')
-          .setLabel('🗑️ Écraser et reconfigurer')
+          .setLabel(t('wizard.overwriteConfirm'))
           .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
           .setCustomId('wizard_overwrite_cancel')
-          .setLabel('↩️ Annuler')
+          .setLabel(t('wizard.overwriteCancel'))
           .setStyle(ButtonStyle.Secondary),
       );
 
@@ -58,9 +54,8 @@ module.exports = {
       });
     }
 
-    // ── Pas de config → démarrer le wizard directement ──────────────────────
     const payload = buildTeamCountPayload();
     await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
-    logger.cmd(`Setup wizard lancé par ${interaction.user.tag}`);
+    logger.cmd(`Setup wizard started by ${interaction.user.tag}`);
   },
 };

@@ -7,13 +7,13 @@ const {
   TextInputStyle,
 } = require('discord.js');
 const { getConfig } = require('../services/configService');
+const { t }         = require('../utils/i18n');
 const logger        = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('set-reset-time')
-    .setDescription('⏰ Modifie l\'heure du reset automatique des équipes')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDescription('⏰ Change the automatic team reset time'),
 
   async execute(interaction) {
     const config      = getConfig();
@@ -21,27 +21,27 @@ module.exports = {
 
     const textInput = new TextInputBuilder()
       .setCustomId('reset_time')
-      .setLabel(currentTime ? `Heure actuelle : ${currentTime}` : 'Heure du reset (HH:MM)')
+      .setLabel(currentTime
+        ? t('setResetTime.fieldLabel', { time: currentTime })
+        : t('setResetTime.fieldLabelEmpty')
+      )
       .setStyle(TextInputStyle.Short)
-      .setPlaceholder('Ex : 03:00')
+      .setPlaceholder(t('setResetTime.fieldPlaceholder'))
       .setMinLength(4)
       .setMaxLength(5)
       .setRequired(true);
 
-    // Ne définir setValue que si une valeur existe déjà
-    if (currentTime) {
-      textInput.setValue(currentTime);
-    }
+    if (currentTime) textInput.setValue(currentTime);
 
     const modal = new ModalBuilder()
       .setCustomId('set_reset_time_modal')
-      .setTitle('Heure du reset automatique');
+      .setTitle(t('setResetTime.modalTitle'));
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(textInput),
     );
 
-    logger.cmd(`/set-reset-time ouvert par ${interaction.user.tag}`);
+    logger.cmd(`/set-reset-time opened by ${interaction.user.tag}`);
     return interaction.showModal(modal);
   },
 };
