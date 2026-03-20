@@ -23,11 +23,11 @@ module.exports = {
     try {
       const guild   = interaction.guild;
       const embed   = await buildTeamsEmbed(guild);
-      const buttons = buildTeamButtons();
+      const buttons = buildTeamButtons(); // retourne un tableau de ActionRows
 
       const message = await interaction.channel.send({
         embeds:     [embed],
-        components: [buttons],
+        components: buttons, // tableau direct, pas besoin de [buttons]
       });
 
       saveSetupMessage(message.id, interaction.channel.id);

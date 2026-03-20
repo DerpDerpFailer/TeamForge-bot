@@ -1,16 +1,27 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { getConfig } = require('../services/configService');
 
 /**
- * Construit les boutons de sélection de team
- * @returns {ActionRowBuilder}
+ * Construit les lignes de boutons de sélection de team
+ * Discord limite à 5 boutons par ActionRow et 5 ActionRows par message
+ * → supporte jusqu'à 25 équipes
+ * @returns {ActionRowBuilder[]}
  */
 function buildTeamButtons() {
-  const config = getConfig();
-  const row    = new ActionRowBuilder();
+  const config  = getConfig();
+  const rows    = [];
+  let   current = new ActionRowBuilder();
 
-  for (const team of config.teams) {
-    row.addComponents(
+  for (let i = 0; i < config.teams.length; i++) {
+    const team = config.teams[i];
+
+    // Nouvelle ligne tous les 5 boutons
+    if (i > 0 && i % 5 === 0) {
+      rows.push(current);
+      current = new ActionRowBuilder();
+    }
+
+    current.addComponents(
       new ButtonBuilder()
         .setCustomId(`team_${team.id}`)
         .setLabel(`${team.emoji} ${team.name}`)
@@ -18,7 +29,12 @@ function buildTeamButtons() {
     );
   }
 
-  return row;
+  // Ajouter la dernière ligne si elle contient des boutons
+  if (current.components.length > 0) {
+    rows.push(current);
+  }
+
+  return rows;
 }
 
 /**
@@ -54,7 +70,7 @@ async function buildTeamsEmbed(guild) {
       continue;
     }
 
-    // Récupérer le rôle (membres déjà fetchés, pas de nouvel appel API)
+    // Récupérer le rôle depuis le cache (membres déjà fetchés)
     const role = guild.roles.cache.get(team.roleId);
 
     if (!role) {

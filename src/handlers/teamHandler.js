@@ -1,4 +1,4 @@
-const { getConfig }                        = require('../services/configService');
+const { getConfig }                         = require('../services/configService');
 const { buildTeamButtons, buildTeamsEmbed } = require('../utils/teamEmbed');
 const logger                                = require('../utils/logger');
 
@@ -12,7 +12,7 @@ async function handle(interaction) {
 
   if (!team) {
     return interaction.reply({
-      content: '❌ Équipe introuvable.',
+      content:  '❌ Équipe introuvable.',
       ephemeral: true,
     });
   }
@@ -23,7 +23,7 @@ async function handle(interaction) {
   // ── Vérifier si le membre est déjà dans cette team ──────────────────────
   if (member.roles.cache.has(team.roleId)) {
     return interaction.reply({
-      content: `✅ Tu es déjà dans **${team.emoji} ${team.name}** !`,
+      content:  `✅ Tu es déjà dans **${team.emoji} ${team.name}** !`,
       ephemeral: true,
     });
   }
@@ -33,7 +33,7 @@ async function handle(interaction) {
 
   if (!role) {
     return interaction.reply({
-      content: '❌ Le rôle de cette équipe est introuvable. Contacte un administrateur.',
+      content:  '❌ Le rôle de cette équipe est introuvable. Contacte un administrateur.',
       ephemeral: true,
     });
   }
@@ -44,7 +44,7 @@ async function handle(interaction) {
 
   if (currentCount >= team.maxPlayers) {
     return interaction.reply({
-      content: `❌ **${team.emoji} ${team.name}** est complète ! (${currentCount}/${team.maxPlayers})`,
+      content:  `❌ **${team.emoji} ${team.name}** est complète ! (${currentCount}/${team.maxPlayers})`,
       ephemeral: true,
     });
   }
@@ -65,7 +65,7 @@ async function handle(interaction) {
   } catch (err) {
     logger.error(`Impossible d'ajouter le rôle ${team.name} à ${member.user.tag} : ${err.message}`);
     return interaction.reply({
-      content: '❌ Impossible d\'ajouter le rôle. Vérifie la hiérarchie des rôles.',
+      content:  '❌ Impossible d\'ajouter le rôle. Vérifie la hiérarchie des rôles.',
       ephemeral: true,
     });
   }
@@ -76,7 +76,7 @@ async function handle(interaction) {
   await refreshSetupMessage(guild, config);
 
   return interaction.reply({
-    content: `✅ Tu as rejoint **${team.emoji} ${team.name}** !`,
+    content:  `✅ Tu as rejoint **${team.emoji} ${team.name}** !`,
     ephemeral: true,
   });
 }
@@ -95,9 +95,9 @@ async function refreshSetupMessage(guild, config) {
     if (!message) return;
 
     const embed   = await buildTeamsEmbed(guild);
-    const buttons = buildTeamButtons();
+    const buttons = buildTeamButtons(); // tableau de ActionRows
 
-    await message.edit({ embeds: [embed], components: [buttons] });
+    await message.edit({ embeds: [embed], components: buttons });
     logger.info('Panneau des équipes mis à jour');
   } catch (err) {
     logger.error(`Impossible de rafraîchir le panneau : ${err.message}`);
