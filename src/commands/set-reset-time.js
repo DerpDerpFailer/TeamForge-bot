@@ -5,11 +5,9 @@ const {
   ActionRowBuilder,
   TextInputBuilder,
   TextInputStyle,
-  MessageFlags,
 } = require('discord.js');
-const { getConfig, saveConfig } = require('../services/configService');
-const { startCron }             = require('../services/cronService');
-const logger                    = require('../utils/logger');
+const { getConfig } = require('../services/configService');
+const logger        = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -19,24 +17,28 @@ module.exports = {
 
   async execute(interaction) {
     const config      = getConfig();
-    const currentTime = config.resetTime ?? 'Non configuré';
+    const currentTime = config.resetTime ?? null;
+
+    const textInput = new TextInputBuilder()
+      .setCustomId('reset_time')
+      .setLabel(currentTime ? `Heure actuelle : ${currentTime}` : 'Heure du reset (HH:MM)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('Ex : 03:00')
+      .setMinLength(4)
+      .setMaxLength(5)
+      .setRequired(true);
+
+    // Ne définir setValue que si une valeur existe déjà
+    if (currentTime) {
+      textInput.setValue(currentTime);
+    }
 
     const modal = new ModalBuilder()
       .setCustomId('set_reset_time_modal')
       .setTitle('Heure du reset automatique');
 
     modal.addComponents(
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('reset_time')
-          .setLabel(`Heure actuelle : ${currentTime}`)
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder('Ex : 03:00')
-          .setValue(currentTime !== 'Non configuré' ? currentTime : '')
-          .setMinLength(4)
-          .setMaxLength(5)
-          .setRequired(true)
-      ),
+      new ActionRowBuilder().addComponents(textInput),
     );
 
     logger.cmd(`/set-reset-time ouvert par ${interaction.user.tag}`);
