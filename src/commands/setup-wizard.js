@@ -5,11 +5,12 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  MessageFlags,
 } = require('discord.js');
 
-const { getConfig }               = require('../services/configService');
-const { buildTeamCountPayload }   = require('../handlers/wizardHandler');
-const logger                      = require('../utils/logger');
+const { getConfig }             = require('../services/configService');
+const { buildTeamCountPayload } = require('../handlers/wizardHandler');
+const logger                    = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -50,12 +51,16 @@ module.exports = {
           .setStyle(ButtonStyle.Secondary),
       );
 
-      return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+      return interaction.reply({
+        embeds:     [embed],
+        components: [row],
+        flags:      MessageFlags.Ephemeral,
+      });
     }
 
     // ── Pas de config → démarrer le wizard directement ──────────────────────
     const payload = buildTeamCountPayload();
-    await interaction.reply({ ...payload, ephemeral: true });
+    await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
     logger.cmd(`Setup wizard lancé par ${interaction.user.tag}`);
   },
 };

@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const { getConfig }           = require('../services/configService');
 const { refreshSetupMessage } = require('../handlers/teamHandler');
 const logger                  = require('../utils/logger');
@@ -10,7 +10,7 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const config = getConfig();
     const guild  = interaction.guild;
@@ -38,7 +38,6 @@ module.exports = {
         }
       }
 
-      // Rafraîchir le panneau
       await refreshSetupMessage(guild, config);
 
       logger.success(`Reset effectué par ${interaction.user.tag} — ${totalRemoved} rôle(s) retirés`);

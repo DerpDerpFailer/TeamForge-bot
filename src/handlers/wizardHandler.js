@@ -7,6 +7,7 @@ const {
   TextInputBuilder,
   TextInputStyle,
   RoleSelectMenuBuilder,
+  MessageFlags,
 } = require('discord.js');
 
 const wizardService               = require('../services/wizardService');
@@ -84,14 +85,13 @@ async function handleCountModalSubmit(interaction) {
   if (isNaN(count) || count < 1 || count > 12) {
     return interaction.reply({
       content: '❌ Le nombre d\'équipes doit être entre **1 et 12**.',
-      ephemeral: true,
+      flags:   MessageFlags.Ephemeral,
     });
   }
 
   const session = wizardService.createSession(interaction.user.id, count);
 
-  // Le modal ne peut pas faire update() → deferReply + editReply
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   return interaction.editReply(buildTeamConfigPayload(session, 0));
 }
 
@@ -103,7 +103,7 @@ async function handleEditTeam(interaction) {
   if (!session) {
     return interaction.reply({
       content: '❌ Session expirée. Relance `/setup-wizard`.',
-      ephemeral: true,
+      flags:   MessageFlags.Ephemeral,
     });
   }
 
@@ -154,7 +154,7 @@ async function handleTeamModalSubmit(interaction) {
   if (!session) {
     return interaction.reply({
       content: '❌ Session expirée. Relance `/setup-wizard`.',
-      ephemeral: true,
+      flags:   MessageFlags.Ephemeral,
     });
   }
 
@@ -163,20 +163,17 @@ async function handleTeamModalSubmit(interaction) {
   const maxRaw = interaction.fields.getTextInputValue('team_max').trim();
   const max    = parseInt(maxRaw);
 
-  // Validation
   if (isNaN(max) || max < 1 || max > 99) {
     return interaction.reply({
       content: '❌ Le nombre maximum de joueurs doit être entre **1 et 99**.',
-      ephemeral: true,
+      flags:   MessageFlags.Ephemeral,
     });
   }
 
-  // Sauvegarder dans la session
   wizardService.updateTeam(interaction.user.id, index, { name, emoji, maxPlayers: max });
   session.teams[index] = { ...session.teams[index], name, emoji, maxPlayers: max };
 
-  // Le modal ne peut pas faire update() → deferReply + editReply
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const nextIndex = index + 1;
 
@@ -195,7 +192,7 @@ async function handleRoleSelect(interaction) {
   if (!session) {
     return interaction.reply({
       content: '❌ Session expirée. Relance `/setup-wizard`.',
-      ephemeral: true,
+      flags:   MessageFlags.Ephemeral,
     });
   }
 
@@ -219,7 +216,7 @@ async function handleConfirm(interaction) {
   if (!session) {
     return interaction.reply({
       content: '❌ Session expirée. Relance `/setup-wizard`.',
-      ephemeral: true,
+      flags:   MessageFlags.Ephemeral,
     });
   }
 
@@ -269,7 +266,6 @@ async function handleCancel(interaction) {
 // BUILDERS
 // ════════════════════════════════════════════════════════════════════════════
 
-// ── Étape 1 : bouton → ouvre le modal de saisie ───────────────────────────
 function buildTeamCountPayload() {
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
@@ -289,7 +285,6 @@ function buildTeamCountPayload() {
   return { embeds: [embed], components: [row] };
 }
 
-// ── Étape 2 : configuration d'une équipe (bouton → modal) ─────────────────
 function buildTeamConfigPayload(session, index) {
   const total = session.teamCount;
 
@@ -317,7 +312,6 @@ function buildTeamConfigPayload(session, index) {
   return { embeds: [embed], components: [row] };
 }
 
-// ── Étape 3 : sélection du rôle Discord ──────────────────────────────────
 function buildRoleSelectionPayload(session, index) {
   const team  = session.teams[index];
   const total = session.teamCount;
@@ -348,7 +342,6 @@ function buildRoleSelectionPayload(session, index) {
   return { embeds: [embed], components: [row] };
 }
 
-// ── Récapitulatif final ───────────────────────────────────────────────────
 function buildRecapPayload(session) {
   const embed = new EmbedBuilder()
     .setColor(0xfee75c)
