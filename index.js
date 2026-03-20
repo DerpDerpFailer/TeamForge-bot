@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, Events } = require('discord.js');
 const logger         = require('./src/utils/logger');
 const commandHandler = require('./src/handlers/commandHandler');
 const eventHandler   = require('./src/handlers/eventHandler');
@@ -32,7 +32,7 @@ commandHandler(client);
 eventHandler(client);
 
 // ── Démarrage du cron au boot depuis config.json ─────────────────────────────
-client.once('ready', () => {
+client.once(Events.ClientReady, () => {
   const config = getConfig();
 
   if (config.resetTime) {
