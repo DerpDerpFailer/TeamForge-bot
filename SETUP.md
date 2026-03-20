@@ -98,10 +98,7 @@ docker compose version
 ### 2.2 Cloner le projet
 
 ```bash
-# Cloner le repo
 git clone https://github.com/TON_USERNAME/teamforge-bot.git
-
-# Entrer dans le dossier
 cd teamforge-bot
 ```
 
@@ -127,13 +124,8 @@ Sauvegarder : `Ctrl+X` → `Y` → `Entrée`
 ### Option A — Ligne de commande *(recommandé)*
 
 ```bash
-# Builder et démarrer le container
 docker compose up -d --build
-
-# Vérifier que le container tourne
 docker ps
-
-# Vérifier les logs
 docker logs -f teamforge
 ```
 
@@ -192,11 +184,12 @@ docker exec -it teamforge node scripts/deploy-commands.js
 ```
 [...] 🔧 COMMAND | Commande préparée : /ping
 [...] 🔧 COMMAND | Commande préparée : /reset-teams
+[...] 🔧 COMMAND | Commande préparée : /set-language
 [...] 🔧 COMMAND | Commande préparée : /set-reset-time
 [...] 🔧 COMMAND | Commande préparée : /setup-teams
 [...] 🔧 COMMAND | Commande préparée : /setup-wizard
 [...] 🔧 COMMAND | Commande préparée : /teams-status
-[...] ✅ SUCCESS | 6 commande(s) déployée(s) avec succès !
+[...] ✅ SUCCESS | 7 commande(s) déployée(s) avec succès !
 ```
 
 > ⚠️ Cette commande est à relancer uniquement quand tu ajoutes ou modifies des slash commands.
@@ -211,7 +204,7 @@ docker exec -it teamforge node scripts/deploy-commands.js
 Paramètres du serveur → Rôles → Créer un rôle
 ```
 
-Créer autant de rôles que d'équipes souhaitées (ex: `Team 1`, `Team 2`...).
+Créer autant de rôles que d'équipes souhaitées.
 
 ### 5.2 Hiérarchie des rôles
 
@@ -219,14 +212,13 @@ Créer autant de rôles que d'équipes souhaitées (ex: `Team 1`, `Team 2`...).
 Paramètres du serveur → Rôles
 ```
 
-Glisser le rôle **TeamForge** au-dessus de tous les rôles Team :
+Le rôle **TeamForge** doit être au-dessus de tous les rôles Team :
 
 ```
 @admin
 @TeamForge        ← doit être ici
 @Team 1
 @Team 2
-@Team 3
 @everyone
 ```
 
@@ -234,9 +226,17 @@ Glisser le rôle **TeamForge** au-dessus de tous les rôles Team :
 
 ## 6️⃣ Premier lancement
 
-### 6.1 Lancer le Setup Wizard
+### 6.1 Choisir la langue *(optionnel)*
 
-Dans Discord (en tant qu'admin) :
+Le bot démarre en **anglais** par défaut. Pour passer en français :
+
+```
+/set-language → Français
+→ "✅ Langue définie sur Français 🇫🇷"
+```
+
+### 6.2 Lancer le Setup Wizard
+
 ```
 /setup-wizard
 ```
@@ -247,7 +247,7 @@ Suivre les 4 étapes :
 3. **Rôles Discord** — sélectionner le rôle pour chaque équipe
 4. **Heure de reset** — format HH:MM (ex: `03:00`)
 
-### 6.2 Envoyer le panneau
+### 6.3 Envoyer le panneau
 
 Dans le salon de ton choix :
 ```
@@ -255,9 +255,9 @@ Dans le salon de ton choix :
 ```
 
 Remplir le modal :
-- **Titre** — titre de l'embed (modifiable)
-- **Description** — texte d'explication (modifiable)
-- **Rôle à mentionner** — nom du rôle (optionnel, ex: `@everyone`)
+- **Titre** — titre de l'embed
+- **Description** — texte d'explication
+- **Rôle à mentionner** — nom du rôle (optionnel)
 
 ---
 
@@ -268,20 +268,20 @@ Remplir le modal :
 ```
 □ Le bot est en ligne sur Discord (statut vert)
 □ /ping répond avec l'embed de latence
+□ /set-language fonctionne (EN ↔ FR)
 □ /setup-wizard fonctionne en 4 étapes
 □ /setup-teams envoie le panneau avec les boutons
 □ Cliquer sur un bouton attribue le rôle
 □ L'embed se met à jour après un clic
 □ Le bouton 🚪 retire le rôle
-□ Les logs ne montrent aucune erreur
-□ Le cron de reset est démarré dans les logs
+□ /set-reset-time configure le cron
+□ Le cron repart automatiquement au redémarrage
+□ Les logs ne montrent aucune erreur ni warning
 ```
 
 ---
 
-## 🔄 Workflow de mise à jour
-
-Pour chaque modification du code :
+## 8️⃣ Workflow de mise à jour
 
 ```bash
 # Sur ta machine locale
@@ -311,14 +311,14 @@ docker logs teamforge --tail 30
 Causes fréquentes :
 - Variable d'environnement manquante dans `.env`
 - Chemin d'import incorrect dans un fichier JS
-- Erreur de syntaxe dans un fichier
+- Erreur de syntaxe dans un fichier JS
 
 ### Rate limit Discord
 
 Symptôme : `Request with opcode 8 was rate limited`
 
 Cause : `guild.members.fetch()` appelé trop fréquemment.
-Solution : vérifier que le fetch n'est appelé qu'une fois au démarrage du panneau.
+Solution : le cache est utilisé automatiquement si `guild.members.cache.size > 1`.
 
 ### "Missing Access"
 
@@ -342,16 +342,22 @@ docker compose down
 docker compose up -d --build
 ```
 
+### La langue ne change pas après /set-language
+
+Vérifier que `data/config.json` est bien accessible depuis le container :
+```bash
+docker exec -it teamforge cat data/config.json
+```
+
 ---
 
 ## 📦 Sauvegarde des données
 
-Les données importantes sont dans le volume Docker `teamforge_data` :
-
 ```bash
-# Localiser le volume
-docker volume inspect teamforge_data
-
 # Sauvegarder config.json
 docker cp teamforge:/app/data/config.json ./config_backup.json
+
+# Restaurer config.json
+docker cp ./config_backup.json teamforge:/app/data/config.json
+docker restart teamforge
 ```

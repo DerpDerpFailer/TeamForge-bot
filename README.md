@@ -1,6 +1,6 @@
 # ⚔️ TeamForge — Discord Team Management Bot
 
-> Bot Discord de gestion d'équipes dynamiques avec attribution automatique des rôles, panneau interactif et reset quotidien.
+> Bot Discord de gestion d'équipes dynamiques avec attribution automatique des rôles, panneau interactif, reset quotidien et support multilingue.
 
 ---
 
@@ -11,9 +11,12 @@
 - [Structure du projet](#-structure-du-projet)
 - [Commandes](#-commandes)
 - [Configuration](#-configuration)
+- [Internationalisation](#-internationalisation)
 - [Flux d'utilisation](#-flux-dutilisation)
 - [Architecture](#-architecture)
 - [Données persistantes](#-données-persistantes)
+- [Logs](#-logs)
+- [Permissions Discord](#-permissions-discord-requises)
 
 ---
 
@@ -26,6 +29,7 @@
 - 🚪 **Quitter une équipe** — Bouton dédié pour se retirer
 - ⏰ **Reset automatique** — Suppression des rôles tous les jours à l'heure configurée
 - 🔁 **Mise à jour en temps réel** — L'embed se met à jour à chaque changement
+- 🌐 **Multilingue** — Support EN/FR via `/set-language`, extensible à d'autres langues
 - 💾 **Persistance** — Configuration sauvegardée dans `data/config.json` (volume Docker)
 - 🐳 **Docker ready** — Image légère Alpine, déploiement simple via `docker compose`
 
@@ -53,6 +57,7 @@ teamforge-bot/
 │   │   ├── setup-wizard.js       # Configuration guidée des équipes
 │   │   ├── setup-teams.js        # Envoi du panneau de sélection
 │   │   ├── set-reset-time.js     # Modification de l'heure de reset
+│   │   ├── set-language.js       # Changement de langue du bot
 │   │   ├── reset-teams.js        # Reset manuel des équipes
 │   │   └── teams-status.js       # Rafraîchissement forcé du panneau
 │   ├── events/
@@ -63,12 +68,16 @@ teamforge-bot/
 │   │   ├── eventHandler.js       # Chargement automatique des événements
 │   │   ├── wizardHandler.js      # Logique du setup wizard
 │   │   └── teamHandler.js        # Logique de sélection d'équipe
+│   ├── locales/
+│   │   ├── en.js                 # Traductions anglaises
+│   │   └── fr.js                 # Traductions françaises
 │   ├── services/
 │   │   ├── configService.js      # Lecture/écriture de data/config.json
 │   │   ├── wizardService.js      # Sessions wizard en mémoire
 │   │   └── cronService.js        # Gestion du cron de reset
 │   └── utils/
 │       ├── logger.js             # Logger centralisé avec timestamps
+│       ├── i18n.js               # Système de traduction t('key', vars)
 │       └── teamEmbed.js          # Construction des embeds et boutons
 ├── scripts/
 │   └── deploy-commands.js        # Déploiement des slash commands
@@ -94,15 +103,16 @@ teamforge-bot/
 | `/setup-wizard` | Lance le wizard de configuration des équipes |
 | `/setup-teams` | Envoie le panneau de sélection dans le salon courant |
 | `/set-reset-time` | Modifie l'heure du reset automatique sans refaire le wizard |
+| `/set-language` | Change la langue du bot (`en` / `fr`) |
 | `/reset-teams` | Retire manuellement tous les rôles Team de tous les membres |
 | `/teams-status` | Force le rafraîchissement du panneau |
 
-### Commandes membres
+### Boutons membres
 
 | Bouton | Description |
 |---|---|
 | `[Emoji] Nom de l'équipe` | Rejoindre une équipe |
-| `🚪 Quitter mon équipe` | Se retirer de son équipe |
+| `🚪 Leave my team / Quitter mon équipe` | Se retirer de son équipe |
 
 ### Commandes utilitaires
 
@@ -138,6 +148,7 @@ Généré automatiquement par le `/setup-wizard` :
     }
   ],
   "resetTime": "03:00",
+  "language": "en",
   "setupMessageId": "123456789012345678",
   "setupChannelId": "123456789012345678"
 }
@@ -152,8 +163,60 @@ Généré automatiquement par le `/setup-wizard` :
 | `teams[].maxPlayers` | Nombre maximum de joueurs (1–99) |
 | `teams[].roleId` | ID du rôle Discord associé |
 | `resetTime` | Heure du reset quotidien (HH:MM, fuseau Europe/Paris) |
+| `language` | Langue active (`en` ou `fr`, défaut : `en`) |
 | `setupMessageId` | ID du message du panneau actif |
 | `setupChannelId` | ID du salon du panneau actif |
+
+---
+
+## 🌐 Internationalisation
+
+TeamForge supporte plusieurs langues via un système i18n intégré.
+
+### Langues disponibles
+
+| Code | Langue | Commande |
+|---|---|---|
+| `en` | 🇬🇧 English | `/set-language language:English` |
+| `fr` | 🇫🇷 Français | `/set-language language:Français` |
+
+### Fonctionnement
+
+La langue est sauvegardée dans `data/config.json` et persiste après redémarrage. Tous les messages du bot (embeds, boutons, réponses éphémères, modals) sont traduits automatiquement.
+
+### Ajouter une nouvelle langue
+
+1. Créer `src/locales/de.js` (ou autre code langue) en copiant `en.js`
+2. Traduire toutes les valeurs
+3. Ajouter la langue dans `src/utils/i18n.js` :
+```js
+const locales = {
+  en: require('../locales/en'),
+  fr: require('../locales/fr'),
+  de: require('../locales/de'), // ← ajouter ici
+};
+```
+4. Ajouter le choix dans `src/commands/set-language.js` :
+```js
+.addChoices(
+  { name: '🇬🇧 English',  value: 'en' },
+  { name: '🇫🇷 Français', value: 'fr' },
+  { name: '🇩🇪 Deutsch',  value: 'de' }, // ← ajouter ici
+)
+```
+
+### Utilisation dans le code
+
+```js
+const { t } = require('../utils/i18n');
+
+// Clé simple
+t('ping.title')  // → "🏓 Pong!" (EN) ou "🏓 Pong !" (FR)
+
+// Clé avec variables
+t('teamHandler.joinSuccess', { emoji: '🔴', name: 'Team 1' })
+// → "✅ You joined **🔴 Team 1**!"
+```
 
 ---
 
@@ -163,8 +226,9 @@ Généré automatiquement par le `/setup-wizard` :
 
 ```
 1. /setup-wizard      → Configurer les équipes + heure de reset
-2. /setup-teams       → Envoyer le panneau dans un salon
-3. Les membres cliquent sur les boutons pour rejoindre une équipe
+2. /set-language      → Choisir la langue (optionnel, défaut EN)
+3. /setup-teams       → Envoyer le panneau dans un salon
+4. Les membres cliquent sur les boutons pour rejoindre une équipe
 ```
 
 ### Modifier uniquement l'heure de reset
@@ -173,10 +237,16 @@ Généré automatiquement par le `/setup-wizard` :
 /set-reset-time  → Saisir la nouvelle heure HH:MM
 ```
 
+### Changer la langue
+
+```
+/set-language → Choisir EN ou FR
+```
+
 ### Reconfigurer les équipes
 
 ```
-/setup-wizard    → Détecte la config existante → demande confirmation
+/setup-wizard  → Détecte la config existante → demande confirmation
 ```
 
 ---
@@ -191,26 +261,39 @@ Discord
   ▼
 interactionCreate.js  (router)
   │
-  ├── isChatInputCommand()  →  commandHandler  →  commands/*.js
+  ├── isChatInputCommand()      →  commandHandler  →  commands/*.js
   │
-  ├── customId: "wizard_*"  →  wizardHandler.js
+  ├── customId: "wizard_*"      →  wizardHandler.js
   │     ├── Boutons (count, edit_team, confirm, cancel...)
   │     ├── Modals (count, team config, reset time)
   │     └── RoleSelectMenu (rôle par équipe)
   │
-  ├── customId: "team_*"    →  teamHandler.js
-  │     ├── team_1, team_2...  →  handleJoin()
-  │     └── team_leave         →  handleLeave()
+  ├── customId: "team_*"        →  teamHandler.js
+  │     ├── team_1, team_2...   →  handleJoin()
+  │     └── team_leave          →  handleLeave()
   │
-  └── customId: "setup_teams_modal"  →  envoi du panneau
+  ├── customId: "setup_teams_modal"    →  envoi du panneau
+  └── customId: "set_reset_time_modal" →  mise à jour du cron
+```
+
+### Système i18n
+
+```
+t('section.key', { var: value })
+  │
+  ▼
+i18n.js
+  ├── getLang()          → lit config.language (défaut: 'en')
+  ├── locales[lang][key] → retourne la string traduite
+  ├── fallback EN        → si clé absente dans la langue active
+  └── replace {vars}     → injection des variables
 ```
 
 ### Gestion du cache membres
 
 Pour éviter les rate limits Discord :
-- `guild.members.fetch()` est appelé **une seule fois** au premier affichage (`fetchMembers = true`)
-- Les refreshs suivants utilisent **uniquement le cache** (`fetchMembers = false`)
-- Le cache est considéré peuplé si `guild.members.cache.size > 1`
+- `guild.members.fetch()` appelé **une seule fois** si `cache.size <= 1`
+- Les refreshs suivants utilisent **uniquement le cache**
 
 ### Disposition des boutons
 
@@ -222,7 +305,7 @@ L'algorithme répartit automatiquement les boutons sur plusieurs lignes :
 | 6–8 | 2 lignes de 3–4 |
 | 9–12 | 3 lignes de 3–4 |
 
-Maximum Discord : 5 boutons × 5 lignes = 25 équipes max.
+Maximum Discord : 5 boutons × 4 lignes (la 5ème est réservée au bouton Quitter) = 20 équipes max.
 
 ---
 
@@ -236,6 +319,14 @@ volumes:
 ```
 
 ✅ Les données survivent aux redémarrages et rebuilds du container.
+
+```bash
+# Sauvegarder la config
+docker cp teamforge:/app/data/config.json ./config_backup.json
+
+# Restaurer la config
+docker cp ./config_backup.json teamforge:/app/data/config.json
+```
 
 ---
 
