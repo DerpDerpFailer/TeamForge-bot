@@ -65,10 +65,21 @@ function buildTeamButtons() {
 }
 
 /**
+ * Fetch les membres du serveur uniquement si le cache est insuffisant.
+ * Évite les rate limits sur les appels répétés.
+ * @param {Guild} guild
+ */
+async function ensureMemberCache(guild) {
+  // Si le cache contient déjà des membres, on ne re-fetch pas
+  if (guild.members.cache.size > 1) return;
+  await guild.members.fetch();
+}
+
+/**
  * Construit l'embed principal qui affiche les teams et leurs membres.
  *
  * @param {Guild}   guild          - Le serveur Discord
- * @param {boolean} fetchMembers   - Si true, force un fetch (premier affichage)
+ * @param {boolean} fetchMembers   - Si true, force un fetch si le cache est vide
  * @param {string}  [title]        - Titre personnalisé (optionnel)
  * @param {string}  [description]  - Description personnalisée (optionnelle)
  * @returns {Promise<EmbedBuilder>}
@@ -77,7 +88,7 @@ async function buildTeamsEmbed(guild, fetchMembers = false, title = null, descri
   const config = getConfig();
 
   if (fetchMembers) {
-    await guild.members.fetch();
+    await ensureMemberCache(guild);
   }
 
   const embed = new EmbedBuilder()
@@ -113,9 +124,9 @@ async function buildTeamsEmbed(guild, fetchMembers = false, title = null, descri
       continue;
     }
 
-    const members   = role.members;
-    const count     = members.size;
-    let memberList  = members.map(m => `• ${m}`).join('\n');
+    const members  = role.members;
+    const count    = members.size;
+    let memberList = members.map(m => `• ${m}`).join('\n');
     if (!memberList) memberList = '*Aucun membre*';
 
     embed.addFields({
