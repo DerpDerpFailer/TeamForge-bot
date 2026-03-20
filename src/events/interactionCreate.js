@@ -1,9 +1,9 @@
-const { Events, MessageFlags }  = require('discord.js');
-const logger                     = require('../utils/logger');
-const wizardHandler              = require('../handlers/wizardHandler');
-const teamHandler                = require('../handlers/teamHandler');
-const { buildTeamButtons, buildTeamsEmbed } = require('../utils/teamEmbed');
-const { getConfig, saveSetupMessage }       = require('../services/configService');
+const { Events, MessageFlags }              = require('discord.js');
+const logger                                 = require('../utils/logger');
+const wizardHandler                          = require('../handlers/wizardHandler');
+const teamHandler                            = require('../handlers/teamHandler');
+const { buildTeamButtons, buildTeamsEmbed }  = require('../utils/teamEmbed');
+const { getConfig, saveSetupMessage }        = require('../services/configService');
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -52,13 +52,33 @@ module.exports = {
       try {
         const title       = interaction.fields.getTextInputValue('panel_title').trim();
         const description = interaction.fields.getTextInputValue('panel_description').trim();
+        const roleRaw     = interaction.fields.getTextInputValue('panel_role_id').trim();
         const guild       = interaction.guild;
 
-        // fetchMembers = true : premier affichage, peuple le cache
+        // ── Validation du rôle (si renseigné) ────────────────────────────────
+        let roleMention = null;
+
+        if (roleRaw) {
+          // Accepte un ID brut (123...) ou une mention <@&123...>
+          const roleId = roleRaw.replace(/\D/g, '');
+          const role   = await guild.roles.fetch(roleId).catch(() => null);
+
+          if (!role) {
+            return interaction.editReply({
+              content: `❌ Rôle introuvable pour l'ID \`${roleRaw}\`. Vérifie l'ID et réessaie.`,
+            });
+          }
+
+          roleMention = `<@&${role.id}>`;
+          logger.info(`Mention du rôle : ${role.name} (${role.id})`);
+        }
+
+        // ── Construction et envoi du panneau ─────────────────────────────────
         const embed   = await buildTeamsEmbed(guild, true, title, description);
         const buttons = buildTeamButtons();
 
         const message = await interaction.channel.send({
+          content:    roleMention ?? undefined, // mention envoyée comme contenu du message
           embeds:     [embed],
           components: buttons,
         });

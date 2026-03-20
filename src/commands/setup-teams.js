@@ -15,7 +15,6 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
-    // ── Ouvrir le modal pour personnaliser titre et description ─────────────
     const modal = new ModalBuilder()
       .setCustomId('setup_teams_modal')
       .setTitle('Personnaliser le panneau');
@@ -42,6 +41,14 @@ module.exports = {
           )
           .setMaxLength(500)
           .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('panel_role_id')
+          .setLabel('ID du rôle à mentionner (optionnel)')
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder('Ex : 123456789012345678  —  Laisser vide pour ignorer')
+          .setRequired(false)
       ),
     );
 
