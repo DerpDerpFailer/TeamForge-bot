@@ -1,7 +1,12 @@
-const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
-const { buildTeamButtons, buildTeamsEmbed }                      = require('../utils/teamEmbed');
-const { saveSetupMessage, getConfig }                            = require('../services/configService');
-const logger                                                      = require('../utils/logger');
+const {
+  SlashCommandBuilder,
+  PermissionFlagsBits,
+  ModalBuilder,
+  ActionRowBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+} = require('discord.js');
+const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -10,38 +15,37 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    // ── Ouvrir le modal pour personnaliser titre et description ─────────────
+    const modal = new ModalBuilder()
+      .setCustomId('setup_teams_modal')
+      .setTitle('Personnaliser le panneau');
 
-    const config = getConfig();
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('panel_title')
+          .setLabel('Titre du panneau')
+          .setStyle(TextInputStyle.Short)
+          .setValue('⚔️ TeamForge — Sélection des équipes')
+          .setMaxLength(100)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('panel_description')
+          .setLabel('Description')
+          .setStyle(TextInputStyle.Paragraph)
+          .setValue(
+            'Clique sur un bouton pour rejoindre une équipe.\n' +
+            'Tu ne peux appartenir qu\'à une seule équipe à la fois.\n' +
+            'Clique sur 🚪 Quitter mon équipe pour te retirer.'
+          )
+          .setMaxLength(500)
+          .setRequired(true)
+      ),
+    );
 
-    if (!config.teams || config.teams.length === 0) {
-      return interaction.editReply({
-        content: '❌ Aucune équipe configurée. Lance d\'abord `/setup-wizard`.',
-      });
-    }
-
-    try {
-      const guild   = interaction.guild;
-      const embed   = await buildTeamsEmbed(guild);
-      const buttons = buildTeamButtons(); // retourne un tableau de ActionRows
-
-      const message = await interaction.channel.send({
-        embeds:     [embed],
-        components: buttons, // tableau direct, pas besoin de [buttons]
-      });
-
-      saveSetupMessage(message.id, interaction.channel.id);
-
-      logger.success(`Panneau envoyé par ${interaction.user.tag} dans #${interaction.channel.name}`);
-
-      return interaction.editReply({
-        content: '✅ Panneau des équipes envoyé avec succès !',
-      });
-    } catch (err) {
-      logger.error(`Erreur /setup-teams : ${err.message}`);
-      return interaction.editReply({
-        content: '❌ Une erreur est survenue.',
-      });
-    }
+    logger.cmd(`/setup-teams modal ouvert par ${interaction.user.tag}`);
+    return interaction.showModal(modal);
   },
 };

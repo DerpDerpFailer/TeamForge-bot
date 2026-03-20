@@ -3,18 +3,6 @@ const { getConfig } = require('../services/configService');
 
 /**
  * Calcule la disposition optimale des boutons par ligne.
- *
- * Règle :
- *   - Trouver le plus petit diviseur (à partir de 2) tel que ceil(X / diviseur) ≤ 5
- *   - Les premières lignes ont ceil(X / diviseur) boutons
- *   - La dernière ligne prend le reste
- *
- * Exemples :
- *   X=8  → diviseur=2 → ceil(8/2)=4  → [4, 4]
- *   X=11 → diviseur=3 → ceil(11/3)=4 → [4, 4, 3]
- *
- * @param {number} total
- * @returns {{ perRow: number }}
  */
 function computeLayout(total) {
   if (total <= 5) return { perRow: total };
@@ -35,13 +23,11 @@ function computeLayout(total) {
  * @returns {ActionRowBuilder[]}
  */
 function buildTeamButtons() {
-  const config  = getConfig();
-  const teams   = config.teams;
-  const total   = teams.length;
+  const config = getConfig();
+  const teams  = config.teams;
+  const total  = teams.length;
+  const rows   = [];
 
-  const rows = [];
-
-  // ── Boutons des équipes ─────────────────────────────────────────────────
   if (total > 0) {
     const { perRow } = computeLayout(total);
     let current = new ActionRowBuilder();
@@ -66,13 +52,14 @@ function buildTeamButtons() {
   }
 
   // ── Bouton "Quitter mon équipe" sur une ligne séparée ───────────────────
-  const leaveRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('team_leave')
-      .setLabel('🚪 Quitter mon équipe')
-      .setStyle(ButtonStyle.Danger),
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('team_leave')
+        .setLabel('🚪 Quitter mon équipe')
+        .setStyle(ButtonStyle.Danger),
+    )
   );
-  rows.push(leaveRow);
 
   return rows;
 }
@@ -80,23 +67,24 @@ function buildTeamButtons() {
 /**
  * Construit l'embed principal qui affiche les teams et leurs membres.
  *
- * @param {Guild} guild          - Le serveur Discord
- * @param {boolean} fetchMembers - Si true, force un fetch des membres (premier affichage)
- *                                 Si false, utilise uniquement le cache (refresh)
+ * @param {Guild}   guild          - Le serveur Discord
+ * @param {boolean} fetchMembers   - Si true, force un fetch (premier affichage)
+ * @param {string}  [title]        - Titre personnalisé (optionnel)
+ * @param {string}  [description]  - Description personnalisée (optionnelle)
  * @returns {Promise<EmbedBuilder>}
  */
-async function buildTeamsEmbed(guild, fetchMembers = false) {
+async function buildTeamsEmbed(guild, fetchMembers = false, title = null, description = null) {
   const config = getConfig();
 
-  // ── Fetch membres seulement si explicitement demandé ────────────────────
   if (fetchMembers) {
     await guild.members.fetch();
   }
 
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
-    .setTitle('⚔️ TeamForge — Sélection des équipes')
+    .setTitle(title ?? '⚔️ TeamForge — Sélection des équipes')
     .setDescription(
+      description ??
       'Clique sur un bouton pour rejoindre une équipe.\n' +
       'Tu ne peux appartenir qu\'à **une seule équipe** à la fois.\n' +
       'Clique sur 🚪 **Quitter mon équipe** pour te retirer.'
@@ -125,10 +113,9 @@ async function buildTeamsEmbed(guild, fetchMembers = false) {
       continue;
     }
 
-    const members = role.members;
-    const count   = members.size;
-
-    let memberList = members.map(m => `• ${m}`).join('\n');
+    const members   = role.members;
+    const count     = members.size;
+    let memberList  = members.map(m => `• ${m}`).join('\n');
     if (!memberList) memberList = '*Aucun membre*';
 
     embed.addFields({
