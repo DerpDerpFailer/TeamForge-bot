@@ -50,27 +50,39 @@ module.exports = {
       }
 
       try {
-        const title       = interaction.fields.getTextInputValue('panel_title').trim();
-        const description = interaction.fields.getTextInputValue('panel_description').trim();
-        const roleRaw     = interaction.fields.getTextInputValue('panel_role_id').trim();
-        const guild       = interaction.guild;
+        const title        = interaction.fields.getTextInputValue('panel_title').trim();
+        const description  = interaction.fields.getTextInputValue('panel_description').trim();
+        const roleNameRaw  = interaction.fields.getTextInputValue('panel_role_name').trim();
+        const guild        = interaction.guild;
 
-        // ── Validation du rôle (si renseigné) ────────────────────────────────
+        // ── Résolution du rôle par son nom ───────────────────────────────────
         let roleMention = null;
 
-        if (roleRaw) {
-          // Accepte un ID brut (123...) ou une mention <@&123...>
-          const roleId = roleRaw.replace(/\D/g, '');
-          const role   = await guild.roles.fetch(roleId).catch(() => null);
+        if (roleNameRaw) {
+          // Nettoyer le nom saisi (enlever @ si l'utilisateur l'a tapé)
+          const roleName = roleNameRaw.replace(/^@/, '').trim();
 
-          if (!role) {
-            return interaction.editReply({
-              content: `❌ Rôle introuvable pour l'ID \`${roleRaw}\`. Vérifie l'ID et réessaie.`,
-            });
+          // Cas spécial @everyone
+          if (roleName.toLowerCase() === 'everyone') {
+            roleMention = '@everyone';
+          } else {
+            // Fetch tous les rôles du serveur pour avoir le cache complet
+            await guild.roles.fetch();
+
+            // Recherche insensible à la casse
+            const role = guild.roles.cache.find(
+              r => r.name.toLowerCase() === roleName.toLowerCase()
+            );
+
+            if (!role) {
+              return interaction.editReply({
+                content: `❌ Rôle \`${roleNameRaw}\` introuvable sur ce serveur. Vérifie le nom et réessaie.`,
+              });
+            }
+
+            roleMention = `<@&${role.id}>`;
+            logger.info(`Mention du rôle : ${role.name} (${role.id})`);
           }
-
-          roleMention = `<@&${role.id}>`;
-          logger.info(`Mention du rôle : ${role.name} (${role.id})`);
         }
 
         // ── Construction et envoi du panneau ─────────────────────────────────
@@ -78,7 +90,7 @@ module.exports = {
         const buttons = buildTeamButtons();
 
         const message = await interaction.channel.send({
-          content:    roleMention ?? undefined, // mention envoyée comme contenu du message
+          content:    roleMention ?? undefined,
           embeds:     [embed],
           components: buttons,
         });

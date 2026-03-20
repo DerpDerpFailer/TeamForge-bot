@@ -44,10 +44,10 @@ module.exports = {
       ),
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
-          .setCustomId('panel_role_id')
-          .setLabel('ID du rôle à mentionner (optionnel)')
+          .setCustomId('panel_role_name')
+          .setLabel('Nom du rôle à mentionner (optionnel)')
           .setStyle(TextInputStyle.Short)
-          .setPlaceholder('Ex : 123456789012345678  —  Laisser vide pour ignorer')
+          .setPlaceholder('Ex : @everyone  ou  Joueurs  —  Laisser vide pour ignorer')
           .setRequired(false)
       ),
     );
