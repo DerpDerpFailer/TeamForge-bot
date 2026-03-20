@@ -3,7 +3,8 @@ const logger                                 = require('../utils/logger');
 const wizardHandler                          = require('../handlers/wizardHandler');
 const teamHandler                            = require('../handlers/teamHandler');
 const { buildTeamButtons, buildTeamsEmbed }  = require('../utils/teamEmbed');
-const { getConfig, saveSetupMessage }        = require('../services/configService');
+const { getConfig, saveSetupMessage, saveConfig } = require('../services/configService');
+const { startCron }                          = require('../services/cronService');
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -37,7 +38,7 @@ module.exports = {
 
     const customId = interaction.customId ?? '';
 
-    // ── Modal /setup-teams — envoi du panneau ────────────────────────────────
+    // ── Modal /setup-teams ───────────────────────────────────────────────────
     if (interaction.isModalSubmit() && customId === 'setup_teams_modal') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -50,33 +51,28 @@ module.exports = {
       }
 
       try {
-        const title        = interaction.fields.getTextInputValue('panel_title').trim();
-        const description  = interaction.fields.getTextInputValue('panel_description').trim();
-        const roleNameRaw  = interaction.fields.getTextInputValue('panel_role_name').trim();
-        const guild        = interaction.guild;
+        const title       = interaction.fields.getTextInputValue('panel_title').trim();
+        const description = interaction.fields.getTextInputValue('panel_description').trim();
+        const roleNameRaw = interaction.fields.getTextInputValue('panel_role_name').trim();
+        const guild       = interaction.guild;
 
-        // ── Résolution du rôle par son nom ───────────────────────────────────
+        // ── Résolution du rôle par son nom ──────────────────────────────────
         let roleMention = null;
 
         if (roleNameRaw) {
-          // Nettoyer le nom saisi (enlever @ si l'utilisateur l'a tapé)
           const roleName = roleNameRaw.replace(/^@/, '').trim();
 
-          // Cas spécial @everyone
           if (roleName.toLowerCase() === 'everyone') {
             roleMention = '@everyone';
           } else {
-            // Fetch tous les rôles du serveur pour avoir le cache complet
             await guild.roles.fetch();
-
-            // Recherche insensible à la casse
             const role = guild.roles.cache.find(
               r => r.name.toLowerCase() === roleName.toLowerCase()
             );
 
             if (!role) {
               return interaction.editReply({
-                content: `❌ Rôle \`${roleNameRaw}\` introuvable sur ce serveur. Vérifie le nom et réessaie.`,
+                content: `❌ Rôle \`${roleNameRaw}\` introuvable. Vérifie le nom et réessaie.`,
               });
             }
 
@@ -85,7 +81,6 @@ module.exports = {
           }
         }
 
-        // ── Construction et envoi du panneau ─────────────────────────────────
         const embed   = await buildTeamsEmbed(guild, true, title, description);
         const buttons = buildTeamButtons();
 
@@ -106,8 +101,53 @@ module.exports = {
       }
     }
 
+    // ── Modal /set-reset-time ────────────────────────────────────────────────
+    if (interaction.isModalSubmit() && customId === 'set_reset_time_modal') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+      const raw = interaction.fields.getTextInputValue('reset_time').trim();
+
+      // Validation HH:MM
+      if (!/^\d{1,2}:\d{2}$/.test(raw)) {
+        return interaction.editReply({
+          content: '❌ Format invalide. Utilise **HH:MM** (ex: `03:00`, `14:30`).',
+        });
+      }
+
+      const [h, m] = raw.split(':').map(Number);
+      if (h < 0 || h > 23 || m < 0 || m > 59) {
+        return interaction.editReply({
+          content: '❌ Heure invalide. Heures : 0–23, Minutes : 0–59.',
+        });
+      }
+
+      // Sauvegarder dans config.json
+      const config     = getConfig();
+      config.resetTime = raw;
+      saveConfig(config);
+
+      // Redémarrer le cron
+      startCron(client, raw);
+
+      logger.success(`Heure de reset modifiée par ${interaction.user.tag} → ${raw}`);
+
+      return interaction.editReply({
+        content: `✅ Reset automatique configuré à **${raw}** (Europe/Paris) !`,
+      });
+    }
+
     // ── Interactions du wizard ───────────────────────────────────────────────
     if (customId.startsWith('wizard_')) {
+      // Bouton spécial : ouvrir modal heure de reset (étape 4)
+      if (interaction.isButton() && customId === 'wizard_reset_time_open_modal') {
+        try {
+          await wizardHandler.handleResetTimeModal(interaction);
+        } catch (err) {
+          logger.error(`Erreur wizard reset time modal : ${err.message}`);
+        }
+        return;
+      }
+
       try {
         await wizardHandler.handle(interaction);
       } catch (err) {
@@ -124,7 +164,7 @@ module.exports = {
       return;
     }
 
-    // ── Boutons des équipes (team_X) et quitter (team_leave) ────────────────
+    // ── Boutons des équipes ──────────────────────────────────────────────────
     if (interaction.isButton() && customId.startsWith('team_')) {
       try {
         await teamHandler.handle(interaction);

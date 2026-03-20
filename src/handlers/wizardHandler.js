@@ -12,14 +12,14 @@ const {
 
 const wizardService               = require('../services/wizardService');
 const { getConfig, saveConfig }   = require('../services/configService');
+const { startCron }               = require('../services/cronService');
 const logger                      = require('../utils/logger');
 
 // ════════════════════════════════════════════════════════════════════════════
-// ROUTER — point d'entrée unique pour toutes les interactions wizard
+// ROUTER
 // ════════════════════════════════════════════════════════════════════════════
 async function handle(interaction) {
 
-  // ── Boutons ──────────────────────────────────────────────────────────────
   if (interaction.isButton()) {
     const id = interaction.customId;
 
@@ -31,13 +31,12 @@ async function handle(interaction) {
     if (id === 'wizard_cancel')             return handleCancel(interaction);
   }
 
-  // ── Modals ───────────────────────────────────────────────────────────────
   if (interaction.isModalSubmit()) {
     if (interaction.customId === 'wizard_count_modal')         return handleCountModalSubmit(interaction);
     if (interaction.customId.startsWith('wizard_team_modal_')) return handleTeamModalSubmit(interaction);
+    if (interaction.customId === 'wizard_reset_time_modal')    return handleResetTimeModalSubmit(interaction);
   }
 
-  // ── Role Select Menus ────────────────────────────────────────────────────
   if (interaction.isRoleSelectMenu()) {
     if (interaction.customId.startsWith('wizard_role_')) {
       return handleRoleSelect(interaction);
@@ -49,13 +48,11 @@ async function handle(interaction) {
 // HANDLERS
 // ════════════════════════════════════════════════════════════════════════════
 
-// ── Confirmation d'écrasement ─────────────────────────────────────────────
 async function handleOverwriteConfirm(interaction) {
   wizardService.deleteSession(interaction.user.id);
   return interaction.update(buildTeamCountPayload());
 }
 
-// ── Ouverture du modal de saisie du nombre d'équipes ─────────────────────
 async function handleCountModal(interaction) {
   const modal = new ModalBuilder()
     .setCustomId('wizard_count_modal')
@@ -77,7 +74,6 @@ async function handleCountModal(interaction) {
   return interaction.showModal(modal);
 }
 
-// ── Traitement du modal de nombre d'équipes ───────────────────────────────
 async function handleCountModalSubmit(interaction) {
   const raw   = interaction.fields.getTextInputValue('team_count').trim();
   const count = parseInt(raw);
@@ -95,7 +91,6 @@ async function handleCountModalSubmit(interaction) {
   return interaction.editReply(buildTeamConfigPayload(session, 0));
 }
 
-// ── Ouverture du modal de configuration d'une équipe ─────────────────────
 async function handleEditTeam(interaction) {
   const index   = parseInt(interaction.customId.split('_')[3]);
   const session = wizardService.getSession(interaction.user.id);
@@ -146,7 +141,6 @@ async function handleEditTeam(interaction) {
   return interaction.showModal(modal);
 }
 
-// ── Traitement du modal de configuration d'équipe ────────────────────────
 async function handleTeamModalSubmit(interaction) {
   const index   = parseInt(interaction.customId.split('_')[3]);
   const session = wizardService.getSession(interaction.user.id);
@@ -184,7 +178,6 @@ async function handleTeamModalSubmit(interaction) {
   }
 }
 
-// ── Sélection du rôle Discord pour une équipe ─────────────────────────────
 async function handleRoleSelect(interaction) {
   const index   = parseInt(interaction.customId.split('_')[2]);
   const session = wizardService.getSession(interaction.user.id);
@@ -205,11 +198,64 @@ async function handleRoleSelect(interaction) {
   if (nextIndex < session.teamCount) {
     return interaction.update(buildRoleSelectionPayload(session, nextIndex));
   } else {
-    return interaction.update(buildRecapPayload(session));
+    // Toutes les équipes ont un rôle → étape 4 : heure de reset
+    return interaction.update(buildResetTimePayload(session));
   }
 }
 
-// ── Confirmation finale et sauvegarde ─────────────────────────────────────
+// ── Étape 4 : ouverture du modal heure de reset ───────────────────────────
+async function handleResetTimeModal(interaction) {
+  const session = wizardService.getSession(interaction.user.id);
+
+  const modal = new ModalBuilder()
+    .setCustomId('wizard_reset_time_modal')
+    .setTitle('Heure du reset automatique');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('reset_time')
+        .setLabel('Heure du reset quotidien (HH:MM)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Ex : 03:00')
+        .setValue(session?.resetTime ?? '03:00')
+        .setMinLength(4)
+        .setMaxLength(5)
+        .setRequired(true)
+    ),
+  );
+
+  return interaction.showModal(modal);
+}
+
+// ── Étape 4 : traitement du modal heure de reset ──────────────────────────
+async function handleResetTimeModalSubmit(interaction) {
+  const session = wizardService.getSession(interaction.user.id);
+
+  if (!session) {
+    return interaction.reply({
+      content: '❌ Session expirée. Relance `/setup-wizard`.',
+      flags:   MessageFlags.Ephemeral,
+    });
+  }
+
+  const raw = interaction.fields.getTextInputValue('reset_time').trim();
+
+  // Validation format HH:MM
+  if (!isValidTime(raw)) {
+    return interaction.reply({
+      content: '❌ Format invalide. Utilise **HH:MM** (ex: `03:00`, `14:30`).',
+      flags:   MessageFlags.Ephemeral,
+    });
+  }
+
+  session.resetTime = raw;
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  return interaction.editReply(buildRecapPayload(session));
+}
+
+// ── Confirmation finale ───────────────────────────────────────────────────
 async function handleConfirm(interaction) {
   const session = wizardService.getSession(interaction.user.id);
 
@@ -222,13 +268,18 @@ async function handleConfirm(interaction) {
 
   const config          = getConfig();
   config.teams          = session.teams;
+  config.resetTime      = session.resetTime;
   config.setupMessageId = '';
   config.setupChannelId = '';
   saveConfig(config);
 
+  // Redémarrer le cron avec la nouvelle heure
+  const client = interaction.client;
+  startCron(client, config.resetTime);
+
   wizardService.deleteSession(interaction.user.id);
 
-  logger.success(`Configuration sauvegardée par ${interaction.user.tag} — ${session.teamCount} équipe(s)`);
+  logger.success(`Configuration sauvegardée par ${interaction.user.tag} — ${session.teamCount} équipe(s) — reset à ${session.resetTime}`);
 
   const embed = new EmbedBuilder()
     .setColor(0x57f287)
@@ -238,11 +289,16 @@ async function handleConfirm(interaction) {
       '👉 Lance maintenant `/setup-teams` dans le salon de ton choix pour afficher le panneau de sélection.'
     )
     .addFields(
-      session.teams.map(t => ({
+      ...session.teams.map(t => ({
         name:   `${t.emoji} ${t.name}`,
         value:  `Rôle : <@&${t.roleId}>\nMax : **${t.maxPlayers}** joueurs`,
         inline: true,
-      }))
+      })),
+      {
+        name:   '⏰ Reset automatique',
+        value:  `Tous les jours à **${session.resetTime}** (Europe/Paris)`,
+        inline: false,
+      }
     )
     .setFooter({ text: 'TeamForge' })
     .setTimestamp();
@@ -250,7 +306,6 @@ async function handleConfirm(interaction) {
   return interaction.update({ embeds: [embed], components: [] });
 }
 
-// ── Annulation ────────────────────────────────────────────────────────────
 async function handleCancel(interaction) {
   wizardService.deleteSession(interaction.user.id);
 
@@ -269,7 +324,7 @@ async function handleCancel(interaction) {
 function buildTeamCountPayload() {
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
-    .setTitle('🧙 Setup Wizard — Étape 1/3')
+    .setTitle('🧙 Setup Wizard — Étape 1/4')
     .setDescription(
       '**Combien d\'équipes veux-tu configurer ?**\n\n' +
       'Clique sur le bouton ci-dessous et entre un nombre entre **1 et 12**.'
@@ -295,7 +350,7 @@ function buildTeamConfigPayload(session, index) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
-    .setTitle(`🧙 Setup Wizard — Étape 2/3  (${index + 1}/${total})`)
+    .setTitle(`🧙 Setup Wizard — Étape 2/4  (${index + 1}/${total})`)
     .setDescription(
       `Configure les paramètres pour l\'équipe **n°${index + 1}**.\n\n` +
       'Clique sur le bouton ci-dessous pour ouvrir le formulaire.'
@@ -326,7 +381,7 @@ function buildRoleSelectionPayload(session, index) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
-    .setTitle(`🧙 Setup Wizard — Étape 3/3  (${index + 1}/${total})`)
+    .setTitle(`🧙 Setup Wizard — Étape 3/4  (${index + 1}/${total})`)
     .setDescription(
       `Sélectionne le **rôle Discord** à associer à **${team.emoji} ${team.name}**.\n\n` +
       '> ⚠️ Le rôle **@TeamForge** doit être **au-dessus** de ce rôle dans la hiérarchie du serveur.'
@@ -342,6 +397,30 @@ function buildRoleSelectionPayload(session, index) {
   return { embeds: [embed], components: [row] };
 }
 
+// ── Étape 4 : payload avec bouton → ouvre modal heure ────────────────────
+function buildResetTimePayload(session) {
+  const embed = new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle('🧙 Setup Wizard — Étape 4/4')
+    .setDescription(
+      '**À quelle heure veux-tu réinitialiser les équipes chaque jour ?**\n\n' +
+      'Clique sur le bouton pour définir l\'heure au format **HH:MM**.'
+    )
+    .addFields({
+      name:  '⏰ Heure actuelle',
+      value: session.resetTime ? `**${session.resetTime}** (Europe/Paris)` : '*Non définie*',
+    });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('wizard_reset_time_open_modal')
+      .setLabel('⏰ Définir l\'heure de reset')
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  return { embeds: [embed], components: [row] };
+}
+
 function buildRecapPayload(session) {
   const embed = new EmbedBuilder()
     .setColor(0xfee75c)
@@ -351,11 +430,16 @@ function buildRecapPayload(session) {
       '**Vérifie et confirme pour appliquer.**'
     )
     .addFields(
-      session.teams.map(t => ({
+      ...session.teams.map(t => ({
         name:   `${t.emoji} ${t.name}`,
         value:  `Rôle : <@&${t.roleId}>\nMax : **${t.maxPlayers}** joueurs`,
         inline: true,
-      }))
+      })),
+      {
+        name:   '⏰ Reset automatique',
+        value:  `Tous les jours à **${session.resetTime}** (Europe/Paris)`,
+        inline: false,
+      }
     )
     .setFooter({ text: '⚠️ Cette action remplacera la configuration existante.' });
 
@@ -373,4 +457,17 @@ function buildRecapPayload(session) {
   return { embeds: [embed], components: [row] };
 }
 
-module.exports = { handle, buildTeamCountPayload };
+// ════════════════════════════════════════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Valide le format HH:MM
+ */
+function isValidTime(str) {
+  if (!/^\d{1,2}:\d{2}$/.test(str)) return false;
+  const [h, m] = str.split(':').map(Number);
+  return h >= 0 && h <= 23 && m >= 0 && m <= 59;
+}
+
+module.exports = { handle, buildTeamCountPayload, handleResetTimeModal };
