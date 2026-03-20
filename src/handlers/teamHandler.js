@@ -1,3 +1,4 @@
+const { MessageFlags }                      = require('discord.js');
 const { getConfig }                         = require('../services/configService');
 const { buildTeamButtons, buildTeamsEmbed } = require('../utils/teamEmbed');
 const logger                                = require('../utils/logger');
@@ -12,8 +13,8 @@ async function handle(interaction) {
 
   if (!team) {
     return interaction.reply({
-      content:  '❌ Équipe introuvable.',
-      ephemeral: true,
+      content: '❌ Équipe introuvable.',
+      flags:   MessageFlags.Ephemeral,
     });
   }
 
@@ -23,29 +24,29 @@ async function handle(interaction) {
   // ── Vérifier si le membre est déjà dans cette team ──────────────────────
   if (member.roles.cache.has(team.roleId)) {
     return interaction.reply({
-      content:  `✅ Tu es déjà dans **${team.emoji} ${team.name}** !`,
-      ephemeral: true,
+      content: `✅ Tu es déjà dans **${team.emoji} ${team.name}** !`,
+      flags:   MessageFlags.Ephemeral,
     });
   }
 
-  // ── Récupérer le rôle et vérifier s'il existe ───────────────────────────
-  const role = await guild.roles.fetch(team.roleId).catch(() => null);
+  // ── Récupérer le rôle depuis le cache (pas de fetch supplémentaire) ──────
+  const role = guild.roles.cache.get(team.roleId)
+            ?? await guild.roles.fetch(team.roleId).catch(() => null);
 
   if (!role) {
     return interaction.reply({
-      content:  '❌ Le rôle de cette équipe est introuvable. Contacte un administrateur.',
-      ephemeral: true,
+      content: '❌ Le rôle de cette équipe est introuvable. Contacte un administrateur.',
+      flags:   MessageFlags.Ephemeral,
     });
   }
 
-  // ── Vérifier si la team est pleine ──────────────────────────────────────
-  await guild.members.fetch();
+  // ── Vérifier si la team est pleine (depuis le cache) ────────────────────
   const currentCount = role.members.size;
 
   if (currentCount >= team.maxPlayers) {
     return interaction.reply({
-      content:  `❌ **${team.emoji} ${team.name}** est complète ! (${currentCount}/${team.maxPlayers})`,
-      ephemeral: true,
+      content: `❌ **${team.emoji} ${team.name}** est complète ! (${currentCount}/${team.maxPlayers})`,
+      flags:   MessageFlags.Ephemeral,
     });
   }
 
@@ -65,8 +66,8 @@ async function handle(interaction) {
   } catch (err) {
     logger.error(`Impossible d'ajouter le rôle ${team.name} à ${member.user.tag} : ${err.message}`);
     return interaction.reply({
-      content:  '❌ Impossible d\'ajouter le rôle. Vérifie la hiérarchie des rôles.',
-      ephemeral: true,
+      content: '❌ Impossible d\'ajouter le rôle. Vérifie la hiérarchie des rôles.',
+      flags:   MessageFlags.Ephemeral,
     });
   }
 
@@ -76,8 +77,8 @@ async function handle(interaction) {
   await refreshSetupMessage(guild, config);
 
   return interaction.reply({
-    content:  `✅ Tu as rejoint **${team.emoji} ${team.name}** !`,
-    ephemeral: true,
+    content: `✅ Tu as rejoint **${team.emoji} ${team.name}** !`,
+    flags:   MessageFlags.Ephemeral,
   });
 }
 
@@ -95,7 +96,7 @@ async function refreshSetupMessage(guild, config) {
     if (!message) return;
 
     const embed   = await buildTeamsEmbed(guild);
-    const buttons = buildTeamButtons(); // tableau de ActionRows
+    const buttons = buildTeamButtons();
 
     await message.edit({ embeds: [embed], components: buttons });
     logger.info('Panneau des équipes mis à jour');
