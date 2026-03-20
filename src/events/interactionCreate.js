@@ -15,7 +15,7 @@ module.exports = {
 
       if (!command) {
         logger.warn(`Commande inconnue reçue : /${interaction.commandName}`);
-        return interaction.reply({ content: '❌ Commande introuvable.', ephemeral: true });
+        return interaction.reply({ content: '❌ Commande introuvable.', flags: 64 });
       }
 
       try {
@@ -23,7 +23,7 @@ module.exports = {
         await command.execute(interaction, client);
       } catch (error) {
         logger.error(`Erreur lors de /${interaction.commandName} : ${error.message}`);
-        const errorMsg = { content: '❌ Une erreur est survenue.', ephemeral: true };
+        const errorMsg = { content: '❌ Une erreur est survenue.', flags: 64 };
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp(errorMsg);
         } else {
@@ -33,15 +33,15 @@ module.exports = {
       return;
     }
 
-    // ── Interactions du wizard ───────────────────────────────────────────────
     const customId = interaction.customId ?? '';
 
+    // ── Interactions du wizard ───────────────────────────────────────────────
     if (customId.startsWith('wizard_')) {
       try {
         await wizardHandler.handle(interaction);
       } catch (err) {
         logger.error(`Erreur wizard [${customId}] : ${err.message}`);
-        const msg = { content: '❌ Une erreur est survenue dans le wizard.', ephemeral: true };
+        const msg = { content: '❌ Une erreur est survenue dans le wizard.', flags: 64 };
         try {
           if (interaction.replied || interaction.deferred) {
             await interaction.followUp(msg);
@@ -53,13 +53,13 @@ module.exports = {
       return;
     }
 
-    // ── Boutons des équipes ──────────────────────────────────────────────────
+    // ── Boutons des équipes (team_X) et quitter (team_leave) ────────────────
     if (interaction.isButton() && customId.startsWith('team_')) {
       try {
         await teamHandler.handle(interaction);
       } catch (err) {
         logger.error(`Erreur teamHandler [${customId}] : ${err.message}`);
-        const msg = { content: '❌ Une erreur est survenue.', ephemeral: true };
+        const msg = { content: '❌ Une erreur est survenue.', flags: 64 };
         try {
           if (interaction.replied || interaction.deferred) {
             await interaction.followUp(msg);

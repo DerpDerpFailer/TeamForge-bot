@@ -30,7 +30,8 @@ function computeLayout(total) {
 }
 
 /**
- * Construit les lignes de boutons de sélection de team.
+ * Construit les lignes de boutons de sélection de team
+ * + une dernière ligne avec le bouton "Quitter mon équipe" en rouge.
  * @returns {ActionRowBuilder[]}
  */
 function buildTeamButtons() {
@@ -38,29 +39,40 @@ function buildTeamButtons() {
   const teams   = config.teams;
   const total   = teams.length;
 
-  if (total === 0) return [];
+  const rows = [];
 
-  const { perRow } = computeLayout(total);
-  const rows       = [];
-  let   current    = new ActionRowBuilder();
+  // ── Boutons des équipes ─────────────────────────────────────────────────
+  if (total > 0) {
+    const { perRow } = computeLayout(total);
+    let current = new ActionRowBuilder();
 
-  for (let i = 0; i < total; i++) {
-    const team = teams[i];
+    for (let i = 0; i < total; i++) {
+      const team = teams[i];
 
-    if (i > 0 && i % perRow === 0) {
-      rows.push(current);
-      current = new ActionRowBuilder();
+      if (i > 0 && i % perRow === 0) {
+        rows.push(current);
+        current = new ActionRowBuilder();
+      }
+
+      current.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`team_${team.id}`)
+          .setLabel(`${team.emoji} ${team.name}`)
+          .setStyle(ButtonStyle.Primary),
+      );
     }
 
-    current.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`team_${team.id}`)
-        .setLabel(`${team.emoji} ${team.name}`)
-        .setStyle(ButtonStyle.Primary),
-    );
+    if (current.components.length > 0) rows.push(current);
   }
 
-  if (current.components.length > 0) rows.push(current);
+  // ── Bouton "Quitter mon équipe" sur une ligne séparée ───────────────────
+  const leaveRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('team_leave')
+      .setLabel('🚪 Quitter mon équipe')
+      .setStyle(ButtonStyle.Danger),
+  );
+  rows.push(leaveRow);
 
   return rows;
 }
@@ -68,7 +80,7 @@ function buildTeamButtons() {
 /**
  * Construit l'embed principal qui affiche les teams et leurs membres.
  *
- * @param {Guild} guild       - Le serveur Discord
+ * @param {Guild} guild          - Le serveur Discord
  * @param {boolean} fetchMembers - Si true, force un fetch des membres (premier affichage)
  *                                 Si false, utilise uniquement le cache (refresh)
  * @returns {Promise<EmbedBuilder>}
@@ -77,7 +89,6 @@ async function buildTeamsEmbed(guild, fetchMembers = false) {
   const config = getConfig();
 
   // ── Fetch membres seulement si explicitement demandé ────────────────────
-  // Évite le rate limit lors des refreshs fréquents
   if (fetchMembers) {
     await guild.members.fetch();
   }
@@ -87,7 +98,8 @@ async function buildTeamsEmbed(guild, fetchMembers = false) {
     .setTitle('⚔️ TeamForge — Sélection des équipes')
     .setDescription(
       'Clique sur un bouton pour rejoindre une équipe.\n' +
-      'Tu ne peux appartenir qu\'à **une seule équipe** à la fois.'
+      'Tu ne peux appartenir qu\'à **une seule équipe** à la fois.\n' +
+      'Clique sur 🚪 **Quitter mon équipe** pour te retirer.'
     )
     .setTimestamp()
     .setFooter({ text: 'TeamForge • Mis à jour' });

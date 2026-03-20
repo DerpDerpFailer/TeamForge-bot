@@ -4,9 +4,26 @@ const { buildTeamButtons, buildTeamsEmbed } = require('../utils/teamEmbed');
 const logger                                = require('../utils/logger');
 
 /**
- * Point d'entrée — appelé quand un membre clique sur un bouton team_X
+ * Point d'entrée — appelé quand un membre clique sur un bouton team_X ou team_leave
  */
 async function handle(interaction) {
+  const customId = interaction.customId;
+
+  // ── Bouton "Quitter mon équipe" ──────────────────────────────────────────
+  if (customId === 'team_leave') {
+    return handleLeave(interaction);
+  }
+
+  // ── Bouton de sélection d'équipe ─────────────────────────────────────────
+  return handleJoin(interaction);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Gère le clic sur un bouton d'équipe (rejoindre)
+ */
+async function handleJoin(interaction) {
   const teamId = parseInt(interaction.customId.split('_')[1]); // "team_3" → 3
   const config = getConfig();
   const team   = config.teams.find(t => t.id === teamId);
@@ -73,11 +90,55 @@ async function handle(interaction) {
 
   logger.success(`${member.user.tag} a rejoint ${team.emoji} ${team.name}`);
 
-  // ── Mettre à jour le panneau (sans re-fetch des membres) ─────────────────
-  await refreshSetupMessage(guild, config);
+  await refreshSetupMessage(interaction.guild, config);
 
   return interaction.reply({
     content: `✅ Tu as rejoint **${team.emoji} ${team.name}** !`,
+    flags:   MessageFlags.Ephemeral,
+  });
+}
+
+/**
+ * Gère le clic sur le bouton "Quitter mon équipe"
+ */
+async function handleLeave(interaction) {
+  const config  = getConfig();
+  const member  = interaction.member;
+  const guild   = interaction.guild;
+
+  // ── Chercher si le membre a un rôle Team ────────────────────────────────
+  const teamRoleIds   = config.teams.map(t => t.roleId).filter(Boolean);
+  const rolesToRemove = member.roles.cache.filter(r => teamRoleIds.includes(r.id));
+
+  if (rolesToRemove.size === 0) {
+    return interaction.reply({
+      content: '❌ Tu ne fais partie d\'aucune équipe.',
+      flags:   MessageFlags.Ephemeral,
+    });
+  }
+
+  // ── Trouver le nom de l'équipe pour le message de confirmation ───────────
+  const removedRole = rolesToRemove.first();
+  const team        = config.teams.find(t => t.roleId === removedRole.id);
+  const teamLabel   = team ? `**${team.emoji} ${team.name}**` : `**${removedRole.name}**`;
+
+  // ── Retirer le(s) rôle(s) Team ───────────────────────────────────────────
+  try {
+    await member.roles.remove(rolesToRemove);
+  } catch (err) {
+    logger.error(`Impossible de retirer le rôle de ${member.user.tag} : ${err.message}`);
+    return interaction.reply({
+      content: '❌ Impossible de te retirer de l\'équipe. Vérifie la hiérarchie des rôles.',
+      flags:   MessageFlags.Ephemeral,
+    });
+  }
+
+  logger.success(`${member.user.tag} a quitté ${teamLabel}`);
+
+  await refreshSetupMessage(guild, config);
+
+  return interaction.reply({
+    content: `✅ Tu as quitté ${teamLabel} !`,
     flags:   MessageFlags.Ephemeral,
   });
 }
@@ -96,7 +157,6 @@ async function refreshSetupMessage(guild, config) {
     const message = await channel.messages.fetch(config.setupMessageId).catch(() => null);
     if (!message) return;
 
-    // fetchMembers = false → utilise uniquement le cache
     const embed   = await buildTeamsEmbed(guild, false);
     const buttons = buildTeamButtons();
 
