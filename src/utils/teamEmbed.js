@@ -2,21 +2,56 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { getConfig } = require('../services/configService');
 
 /**
- * Construit les lignes de boutons de sélection de team
- * Discord limite à 5 boutons par ActionRow et 5 ActionRows par message
- * → supporte jusqu'à 25 équipes
+ * Calcule la disposition optimale des boutons par ligne.
+ *
+ * Règle :
+ *   - Trouver le plus petit diviseur (à partir de 2) tel que ceil(X / diviseur) ≤ 5
+ *   - Les premières lignes ont ceil(X / diviseur) boutons
+ *   - La dernière ligne prend le reste
+ *
+ * Exemples :
+ *   X=8  → diviseur=2 → ceil(8/2)=4  → [4, 4]
+ *   X=11 → diviseur=2 → ceil(11/2)=6 > 5, diviseur=3 → ceil(11/3)=4 → [4, 4, 3]
+ *   X=1  → [1]
+ *
+ * @param {number} total - Nombre total de boutons
+ * @returns {{ perRow: number, rows: number }}
+ */
+function computeLayout(total) {
+  if (total <= 5) return { perRow: total, rows: 1 };
+
+  let divisor = 2;
+  while (divisor <= total) {
+    const perRow = Math.ceil(total / divisor);
+    if (perRow <= 5) return { perRow, rows: Math.ceil(total / perRow) };
+    divisor++;
+  }
+
+  // Fallback (ne devrait pas arriver avec max 25 teams)
+  return { perRow: 5, rows: Math.ceil(total / 5) };
+}
+
+/**
+ * Construit les lignes de boutons de sélection de team.
+ * La disposition est calculée automatiquement selon le nombre d'équipes.
  * @returns {ActionRowBuilder[]}
  */
 function buildTeamButtons() {
-  const config  = getConfig();
-  const rows    = [];
-  let   current = new ActionRowBuilder();
+  const config = getConfig();
+  const teams  = config.teams;
+  const total  = teams.length;
 
-  for (let i = 0; i < config.teams.length; i++) {
-    const team = config.teams[i];
+  if (total === 0) return [];
 
-    // Nouvelle ligne tous les 5 boutons
-    if (i > 0 && i % 5 === 0) {
+  const { perRow } = computeLayout(total);
+  const rows       = [];
+  let   current    = new ActionRowBuilder();
+
+  for (let i = 0; i < total; i++) {
+    const team = teams[i];
+
+    // Nouvelle ligne tous les `perRow` boutons (sauf pour i=0)
+    if (i > 0 && i % perRow === 0) {
       rows.push(current);
       current = new ActionRowBuilder();
     }
@@ -29,17 +64,15 @@ function buildTeamButtons() {
     );
   }
 
-  // Ajouter la dernière ligne si elle contient des boutons
-  if (current.components.length > 0) {
-    rows.push(current);
-  }
+  // Ajouter la dernière ligne
+  if (current.components.length > 0) rows.push(current);
 
   return rows;
 }
 
 /**
- * Construit l'embed principal qui affiche les teams et leurs membres
- * Fetch les membres une seule fois pour éviter le rate limit
+ * Construit l'embed principal qui affiche les teams et leurs membres.
+ * Fetch les membres une seule fois pour éviter le rate limit.
  * @param {Guild} guild - Le serveur Discord
  * @returns {Promise<EmbedBuilder>}
  */
