@@ -11,35 +11,32 @@ const { getConfig } = require('../services/configService');
  *
  * Exemples :
  *   X=8  → diviseur=2 → ceil(8/2)=4  → [4, 4]
- *   X=11 → diviseur=2 → ceil(11/2)=6 > 5, diviseur=3 → ceil(11/3)=4 → [4, 4, 3]
- *   X=1  → [1]
+ *   X=11 → diviseur=3 → ceil(11/3)=4 → [4, 4, 3]
  *
- * @param {number} total - Nombre total de boutons
- * @returns {{ perRow: number, rows: number }}
+ * @param {number} total
+ * @returns {{ perRow: number }}
  */
 function computeLayout(total) {
-  if (total <= 5) return { perRow: total, rows: 1 };
+  if (total <= 5) return { perRow: total };
 
   let divisor = 2;
   while (divisor <= total) {
     const perRow = Math.ceil(total / divisor);
-    if (perRow <= 5) return { perRow, rows: Math.ceil(total / perRow) };
+    if (perRow <= 5) return { perRow };
     divisor++;
   }
 
-  // Fallback (ne devrait pas arriver avec max 25 teams)
-  return { perRow: 5, rows: Math.ceil(total / 5) };
+  return { perRow: 5 };
 }
 
 /**
  * Construit les lignes de boutons de sélection de team.
- * La disposition est calculée automatiquement selon le nombre d'équipes.
  * @returns {ActionRowBuilder[]}
  */
 function buildTeamButtons() {
-  const config = getConfig();
-  const teams  = config.teams;
-  const total  = teams.length;
+  const config  = getConfig();
+  const teams   = config.teams;
+  const total   = teams.length;
 
   if (total === 0) return [];
 
@@ -50,7 +47,6 @@ function buildTeamButtons() {
   for (let i = 0; i < total; i++) {
     const team = teams[i];
 
-    // Nouvelle ligne tous les `perRow` boutons (sauf pour i=0)
     if (i > 0 && i % perRow === 0) {
       rows.push(current);
       current = new ActionRowBuilder();
@@ -64,7 +60,6 @@ function buildTeamButtons() {
     );
   }
 
-  // Ajouter la dernière ligne
   if (current.components.length > 0) rows.push(current);
 
   return rows;
@@ -72,15 +67,20 @@ function buildTeamButtons() {
 
 /**
  * Construit l'embed principal qui affiche les teams et leurs membres.
- * Fetch les membres une seule fois pour éviter le rate limit.
- * @param {Guild} guild - Le serveur Discord
+ *
+ * @param {Guild} guild       - Le serveur Discord
+ * @param {boolean} fetchMembers - Si true, force un fetch des membres (premier affichage)
+ *                                 Si false, utilise uniquement le cache (refresh)
  * @returns {Promise<EmbedBuilder>}
  */
-async function buildTeamsEmbed(guild) {
+async function buildTeamsEmbed(guild, fetchMembers = false) {
   const config = getConfig();
 
-  // ── Fetch unique des membres — évite le rate limit ──────────────────────
-  await guild.members.fetch();
+  // ── Fetch membres seulement si explicitement demandé ────────────────────
+  // Évite le rate limit lors des refreshs fréquents
+  if (fetchMembers) {
+    await guild.members.fetch();
+  }
 
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
@@ -93,7 +93,6 @@ async function buildTeamsEmbed(guild) {
     .setFooter({ text: 'TeamForge • Mis à jour' });
 
   for (const team of config.teams) {
-    // Si aucun rôle configuré → avertissement
     if (!team.roleId) {
       embed.addFields({
         name:   `${team.emoji} ${team.name} (0/${team.maxPlayers})`,
@@ -103,7 +102,6 @@ async function buildTeamsEmbed(guild) {
       continue;
     }
 
-    // Récupérer le rôle depuis le cache (membres déjà fetchés)
     const role = guild.roles.cache.get(team.roleId);
 
     if (!role) {

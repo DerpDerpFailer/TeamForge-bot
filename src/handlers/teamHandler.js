@@ -29,7 +29,7 @@ async function handle(interaction) {
     });
   }
 
-  // ── Récupérer le rôle depuis le cache (pas de fetch supplémentaire) ──────
+  // ── Récupérer le rôle depuis le cache ────────────────────────────────────
   const role = guild.roles.cache.get(team.roleId)
             ?? await guild.roles.fetch(team.roleId).catch(() => null);
 
@@ -40,7 +40,7 @@ async function handle(interaction) {
     });
   }
 
-  // ── Vérifier si la team est pleine (depuis le cache) ────────────────────
+  // ── Vérifier si la team est pleine ──────────────────────────────────────
   const currentCount = role.members.size;
 
   if (currentCount >= team.maxPlayers) {
@@ -73,7 +73,7 @@ async function handle(interaction) {
 
   logger.success(`${member.user.tag} a rejoint ${team.emoji} ${team.name}`);
 
-  // ── Mettre à jour le message du panneau ─────────────────────────────────
+  // ── Mettre à jour le panneau (sans re-fetch des membres) ─────────────────
   await refreshSetupMessage(guild, config);
 
   return interaction.reply({
@@ -83,7 +83,8 @@ async function handle(interaction) {
 }
 
 /**
- * Rafraîchit le message du panneau de sélection des équipes
+ * Rafraîchit le message du panneau de sélection des équipes.
+ * N'effectue PAS de guild.members.fetch() pour éviter le rate limit.
  */
 async function refreshSetupMessage(guild, config) {
   if (!config.setupMessageId || !config.setupChannelId) return;
@@ -95,7 +96,8 @@ async function refreshSetupMessage(guild, config) {
     const message = await channel.messages.fetch(config.setupMessageId).catch(() => null);
     if (!message) return;
 
-    const embed   = await buildTeamsEmbed(guild);
+    // fetchMembers = false → utilise uniquement le cache
+    const embed   = await buildTeamsEmbed(guild, false);
     const buttons = buildTeamButtons();
 
     await message.edit({ embeds: [embed], components: buttons });
