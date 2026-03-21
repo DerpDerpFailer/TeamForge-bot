@@ -27,7 +27,16 @@ async function handleJoin(interaction) {
 
   // ── Membre déjà dans cette team → réafficher la sélection de sous-rôle ───
   if (member.roles.cache.has(team.roleId)) {
-    return interaction.reply(buildSubRolePayload(team));
+    const subRolePayload = buildSubRolePayload(team);
+
+    // Pas de sous-rôles configurés → réponse simple
+    if (!subRolePayload.embeds) {
+      return interaction.reply(subRolePayload);
+    }
+
+    // Déférer pour permettre deleteReply() plus tard
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    return interaction.editReply(subRolePayload);
   }
 
   // ── Récupérer le rôle depuis le cache ────────────────────────────────────
@@ -63,7 +72,7 @@ async function handleJoin(interaction) {
     });
   }
 
-  // ── Effacer le sous-rôle du membre (il devra rechoisir) ──────────────────
+  // ── Effacer le sous-rôle persisté (il devra rechoisir) ───────────────────
   clearMemberSubRole(member.id);
 
   // ── Ajouter le nouveau rôle Team ──────────────────────────────────────────
@@ -82,8 +91,16 @@ async function handleJoin(interaction) {
   // ── Mettre à jour le panneau ──────────────────────────────────────────────
   await refreshSetupMessage(guild, config);
 
-  // ── Afficher la sélection de sous-rôle ───────────────────────────────────
-  return interaction.reply(buildSubRolePayload(team));
+  // ── Afficher la sélection de sous-rôle (deferée pour permettre deleteReply) ─
+  const subRolePayload = buildSubRolePayload(team);
+
+  if (!subRolePayload.embeds) {
+    // Pas de sous-rôles → réponse simple non supprimable
+    return interaction.reply(subRolePayload);
+  }
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  return interaction.editReply(subRolePayload);
 }
 
 async function handleLeave(interaction) {
@@ -95,7 +112,6 @@ async function handleLeave(interaction) {
   const subRoleIds    = (config.subRoles ?? []).map(r => r.roleId).filter(Boolean);
   const allRoleIds    = [...teamRoleIds, ...subRoleIds];
 
-  // Vérifier que le membre est dans une team
   if (!member.roles.cache.some(r => teamRoleIds.includes(r.id))) {
     return interaction.reply({
       content: t('teamHandler.leaveNoTeam'),
@@ -118,7 +134,6 @@ async function handleLeave(interaction) {
     });
   }
 
-  // ── Effacer le sous-rôle du membre ────────────────────────────────────────
   clearMemberSubRole(member.id);
 
   logger.success(t('teamHandler.logLeft', { user: member.user.tag, team: teamLabel }));
