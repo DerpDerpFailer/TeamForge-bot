@@ -29,12 +29,10 @@ async function handleJoin(interaction) {
   if (member.roles.cache.has(team.roleId)) {
     const subRolePayload = buildSubRolePayload(team);
 
-    // Pas de sous-rôles configurés → réponse simple
     if (!subRolePayload.embeds) {
       return interaction.reply(subRolePayload);
     }
 
-    // Déférer pour permettre deleteReply() plus tard
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     return interaction.editReply(subRolePayload);
   }
@@ -72,7 +70,6 @@ async function handleJoin(interaction) {
     });
   }
 
-  // ── Effacer le sous-rôle persisté (il devra rechoisir) ───────────────────
   clearMemberSubRole(member.id);
 
   // ── Ajouter le nouveau rôle Team ──────────────────────────────────────────
@@ -88,14 +85,12 @@ async function handleJoin(interaction) {
 
   logger.success(t('teamHandler.logJoined', { user: member.user.tag, emoji: team.emoji, name: team.name }));
 
-  // ── Mettre à jour le panneau ──────────────────────────────────────────────
   await refreshSetupMessage(guild, config);
 
-  // ── Afficher la sélection de sous-rôle (deferée pour permettre deleteReply) ─
+  // ── Afficher la sélection de sous-rôle (deferée pour deleteReply) ─────────
   const subRolePayload = buildSubRolePayload(team);
 
   if (!subRolePayload.embeds) {
-    // Pas de sous-rôles → réponse simple non supprimable
     return interaction.reply(subRolePayload);
   }
 
@@ -104,13 +99,13 @@ async function handleJoin(interaction) {
 }
 
 async function handleLeave(interaction) {
-  const config        = getConfig();
-  const member        = interaction.member;
-  const guild         = interaction.guild;
+  const config      = getConfig();
+  const member      = interaction.member;
+  const guild       = interaction.guild;
 
-  const teamRoleIds   = config.teams.map(t => t.roleId).filter(Boolean);
-  const subRoleIds    = (config.subRoles ?? []).map(r => r.roleId).filter(Boolean);
-  const allRoleIds    = [...teamRoleIds, ...subRoleIds];
+  const teamRoleIds = config.teams.map(t => t.roleId).filter(Boolean);
+  const subRoleIds  = (config.subRoles ?? []).map(r => r.roleId).filter(Boolean);
+  const allRoleIds  = [...teamRoleIds, ...subRoleIds];
 
   if (!member.roles.cache.some(r => teamRoleIds.includes(r.id))) {
     return interaction.reply({
@@ -140,10 +135,19 @@ async function handleLeave(interaction) {
 
   await refreshSetupMessage(guild, config);
 
-  return interaction.reply({
+  // ── Message de confirmation avec auto-suppression après 3s ───────────────
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await interaction.editReply({
     content: t('teamHandler.leaveSuccess', { team: teamLabel }),
-    flags:   MessageFlags.Ephemeral,
   });
+
+  setTimeout(async () => {
+    try {
+      await interaction.deleteReply();
+    } catch {
+      // Ignoré — interaction expirée
+    }
+  }, 3000);
 }
 
 async function refreshSetupMessage(guild, config) {
