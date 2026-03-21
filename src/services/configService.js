@@ -2,30 +2,22 @@ const fs   = require('fs');
 const path = require('path');
 const logger = require('../utils/logger');
 
-// La config est stockée dans data/ (volume Docker persistant)
-const DATA_DIR    = path.join(__dirname, '../../data');
-const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
+const DATA_DIR          = path.join(__dirname, '../../data');
+const CONFIG_PATH       = path.join(DATA_DIR, 'config.json');
+const MEMBER_ROLES_PATH = path.join(DATA_DIR, 'memberRoles.json');
 
-/**
- * S'assure que le dossier data/ existe
- */
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 }
 
-/**
- * Config par défaut si aucun fichier n'existe encore
- */
 function defaultConfig() {
   return { teams: [], setupMessageId: '', setupChannelId: '' };
 }
 
-/**
- * Lit et retourne la configuration depuis data/config.json
- * Retourne une config par défaut si le fichier n'existe pas encore
- */
+// ── Config ────────────────────────────────────────────────────────────────
+
 function getConfig() {
   try {
     ensureDataDir();
@@ -33,33 +25,104 @@ function getConfig() {
     const raw = fs.readFileSync(CONFIG_PATH, 'utf-8');
     return JSON.parse(raw);
   } catch (err) {
-    logger.error(`Impossible de lire config.json : ${err.message}`);
+    logger.error(`Unable to read config.json: ${err.message}`);
     return defaultConfig();
   }
 }
 
-/**
- * Sauvegarde la configuration dans data/config.json
- */
 function saveConfig(config) {
   try {
     ensureDataDir();
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
-    logger.info('Configuration sauvegardée dans data/config.json');
+    logger.info('Configuration saved in data/config.json');
   } catch (err) {
-    logger.error(`Impossible de sauvegarder config.json : ${err.message}`);
+    logger.error(`Unable to save config.json: ${err.message}`);
   }
 }
 
-/**
- * Met à jour les IDs du message de setup
- */
 function saveSetupMessage(messageId, channelId) {
   const config = getConfig();
   config.setupMessageId = messageId;
   config.setupChannelId = channelId;
   saveConfig(config);
-  logger.info(`Message de setup enregistré : ${messageId} (channel: ${channelId})`);
+  logger.info(`Setup message saved: ${messageId} (channel: ${channelId})`);
 }
 
-module.exports = { getConfig, saveConfig, saveSetupMessage };
+// ── Member Roles ──────────────────────────────────────────────────────────
+// Stocke le sous-rôle choisi par chaque membre
+// Format : { "userId": subRoleId, ... }
+
+function getMemberRoles() {
+  try {
+    ensureDataDir();
+    if (!fs.existsSync(MEMBER_ROLES_PATH)) return {};
+    const raw = fs.readFileSync(MEMBER_ROLES_PATH, 'utf-8');
+    return JSON.parse(raw);
+  } catch (err) {
+    logger.error(`Unable to read memberRoles.json: ${err.message}`);
+    return {};
+  }
+}
+
+function saveMemberRoles(data) {
+  try {
+    ensureDataDir();
+    fs.writeFileSync(MEMBER_ROLES_PATH, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    logger.error(`Unable to save memberRoles.json: ${err.message}`);
+  }
+}
+
+/**
+ * Enregistre le sous-rôle choisi par un membre
+ * @param {string} userId
+ * @param {number} subRoleId
+ */
+function setMemberSubRole(userId, subRoleId) {
+  const data   = getMemberRoles();
+  data[userId] = subRoleId;
+  saveMemberRoles(data);
+}
+
+/**
+ * Supprime le sous-rôle d'un membre (quitte l'équipe, reset, etc.)
+ * @param {string} userId
+ */
+function clearMemberSubRole(userId) {
+  const data = getMemberRoles();
+  delete data[userId];
+  saveMemberRoles(data);
+}
+
+/**
+ * Supprime tous les sous-rôles (reset quotidien)
+ */
+function clearAllMemberSubRoles() {
+  saveMemberRoles({});
+  logger.info('All member sub-roles cleared');
+}
+
+/**
+ * Retourne l'emoji du sous-rôle d'un membre, ou '' si non défini
+ * @param {string} userId
+ * @param {Array}  subRoles - config.subRoles
+ * @returns {string}
+ */
+function getMemberSubRoleEmoji(userId, subRoles = []) {
+  const data      = getMemberRoles();
+  const subRoleId = data[userId];
+  if (!subRoleId) return '';
+  const subRole = subRoles.find(r => r.id === subRoleId);
+  return subRole ? subRole.emoji : '';
+}
+
+module.exports = {
+  getConfig,
+  saveConfig,
+  saveSetupMessage,
+  getMemberRoles,
+  setMemberSubRole,
+  clearMemberSubRole,
+  clearAllMemberSubRoles,
+  getMemberSubRoleEmoji,
+};

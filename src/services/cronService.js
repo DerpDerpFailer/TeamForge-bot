@@ -1,16 +1,11 @@
 const cron   = require('node-cron');
 const logger = require('../utils/logger');
-const { getConfig }           = require('./configService');
-const { refreshSetupMessage } = require('../handlers/teamHandler');
-const { t }                   = require('../utils/i18n');
+const { getConfig, clearAllMemberSubRoles } = require('./configService');
+const { refreshSetupMessage }               = require('../handlers/teamHandler');
+const { t }                                 = require('../utils/i18n');
 
 let currentTask = null;
 
-/**
- * Démarre (ou redémarre) le cron de reset quotidien.
- * @param {Client} client
- * @param {string} resetTime - HH:MM
- */
 function startCron(client, resetTime) {
   if (currentTask) {
     currentTask.stop();
@@ -47,6 +42,7 @@ function startCron(client, resetTime) {
       await guild.members.fetch();
       let totalRemoved = 0;
 
+      // ── Retirer les rôles Team ───────────────────────────────────────────
       for (const team of config.teams) {
         if (!team.roleId) continue;
         const role = guild.roles.cache.get(team.roleId);
@@ -54,13 +50,28 @@ function startCron(client, resetTime) {
 
         for (const [, member] of role.members) {
           await member.roles.remove(team.roleId).catch(err => {
-            logger.error(`Cron reset: unable to remove ${team.name} from ${member.user.tag}: ${err.message}`);
+            logger.error(`Cron: unable to remove ${team.name} from ${member.user.tag}: ${err.message}`);
           });
           totalRemoved++;
         }
       }
 
+      // ── Retirer les rôles sous-rôles Discord ────────────────────────────
+      for (const subRole of (config.subRoles ?? [])) {
+        if (!subRole.roleId) continue;
+        const role = guild.roles.cache.get(subRole.roleId);
+        if (!role) continue;
+
+        for (const [, member] of role.members) {
+          await member.roles.remove(subRole.roleId).catch(() => {});
+        }
+      }
+
+      // ── Effacer tous les sous-rôles persistés ────────────────────────────
+      clearAllMemberSubRoles();
+
       await refreshSetupMessage(guild, config);
+
       logger.success(t('cron.success', { count: totalRemoved }));
     } catch (err) {
       logger.error(t('cron.error', { error: err.message }));

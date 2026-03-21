@@ -1,10 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { getConfig } = require('../services/configService');
-const { t }         = require('./i18n');
+const { getConfig, getMemberSubRoleEmoji } = require('../services/configService');
+const { t } = require('./i18n');
 
-/**
- * Calcule la disposition optimale des boutons par ligne.
- */
 function computeLayout(total) {
   if (total <= 5) return { perRow: total };
   let divisor = 2;
@@ -16,11 +13,6 @@ function computeLayout(total) {
   return { perRow: 5 };
 }
 
-/**
- * Construit les lignes de boutons de sélection de team
- * + une dernière ligne avec le bouton "Quitter" en rouge.
- * @returns {ActionRowBuilder[]}
- */
 function buildTeamButtons() {
   const config = getConfig();
   const teams  = config.teams;
@@ -33,12 +25,10 @@ function buildTeamButtons() {
 
     for (let i = 0; i < total; i++) {
       const team = teams[i];
-
       if (i > 0 && i % perRow === 0) {
         rows.push(current);
         current = new ActionRowBuilder();
       }
-
       current.addComponents(
         new ButtonBuilder()
           .setCustomId(`team_${team.id}`)
@@ -46,7 +36,6 @@ function buildTeamButtons() {
           .setStyle(ButtonStyle.Primary),
       );
     }
-
     if (current.components.length > 0) rows.push(current);
   }
 
@@ -62,9 +51,6 @@ function buildTeamButtons() {
   return rows;
 }
 
-/**
- * Fetch les membres uniquement si le cache est insuffisant.
- */
 async function ensureMemberCache(guild) {
   if (guild.members.cache.size > 1) return;
   await guild.members.fetch();
@@ -72,14 +58,11 @@ async function ensureMemberCache(guild) {
 
 /**
  * Construit l'embed principal des équipes.
- *
- * @param {Guild}   guild
- * @param {boolean} fetchMembers
- * @param {string}  [title]
- * @param {string}  [description]
+ * Affiche l'emoji du sous-rôle choisi devant chaque pseudo.
  */
 async function buildTeamsEmbed(guild, fetchMembers = false, title = null, description = null) {
-  const config = getConfig();
+  const config    = getConfig();
+  const subRoles  = config.subRoles ?? [];
 
   if (fetchMembers) {
     await ensureMemberCache(guild);
@@ -113,9 +96,17 @@ async function buildTeamsEmbed(guild, fetchMembers = false, title = null, descri
       continue;
     }
 
-    const members  = role.members;
-    const count    = members.size;
-    let memberList = members.map(m => `• ${m}`).join('\n');
+    const members = role.members;
+    const count   = members.size;
+
+    // Construire la liste avec l'emoji du sous-rôle devant chaque membre
+    let memberList = members.map(m => {
+      const subRoleEmoji = getMemberSubRoleEmoji(m.id, subRoles);
+      return subRoleEmoji
+        ? `${subRoleEmoji} ${m}`   // ex: 🛡️ @DerpyFailer
+        : `• ${m}`;                // ex: • @DerpyFailer (pas de sous-rôle)
+    }).join('\n');
+
     if (!memberList) memberList = t('embed.noMembers');
 
     embed.addFields({

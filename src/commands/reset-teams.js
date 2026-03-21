@@ -1,8 +1,8 @@
 const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
-const { getConfig }           = require('../services/configService');
-const { refreshSetupMessage } = require('../handlers/teamHandler');
-const { t }                   = require('../utils/i18n');
-const logger                  = require('../utils/logger');
+const { getConfig, clearAllMemberSubRoles } = require('../services/configService');
+const { refreshSetupMessage }               = require('../handlers/teamHandler');
+const { t }                                 = require('../utils/i18n');
+const logger                                = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -23,6 +23,7 @@ module.exports = {
       await guild.members.fetch();
       let totalRemoved = 0;
 
+      // ── Retirer les rôles Team ─────────────────────────────────────────────
       for (const team of config.teams) {
         if (!team.roleId) continue;
         const role = await guild.roles.fetch(team.roleId).catch(() => null);
@@ -35,6 +36,19 @@ module.exports = {
           totalRemoved++;
         }
       }
+
+      // ── Retirer les rôles sous-rôles Discord ──────────────────────────────
+      for (const subRole of (config.subRoles ?? [])) {
+        if (!subRole.roleId) continue;
+        const role = guild.roles.cache.get(subRole.roleId);
+        if (!role) continue;
+        for (const [, member] of role.members) {
+          await member.roles.remove(subRole.roleId).catch(() => {});
+        }
+      }
+
+      // ── Effacer tous les sous-rôles persistés ─────────────────────────────
+      clearAllMemberSubRoles();
 
       await refreshSetupMessage(guild, config);
 
