@@ -1,6 +1,6 @@
 # ⚔️ TeamForge — Discord Team Management Bot
 
-> Bot Discord de gestion d'équipes dynamiques avec attribution automatique des rôles, panneau interactif, reset quotidien et support multilingue.
+> Bot Discord de gestion d'équipes dynamiques avec attribution automatique des rôles, panneau interactif, sous-rôles, reset quotidien et support multilingue.
 
 ---
 
@@ -11,6 +11,7 @@
 - [Structure du projet](#-structure-du-projet)
 - [Commandes](#-commandes)
 - [Configuration](#-configuration)
+- [Sous-rôles](#-sous-rôles)
 - [Internationalisation](#-internationalisation)
 - [Flux d'utilisation](#-flux-dutilisation)
 - [Architecture](#-architecture)
@@ -24,13 +25,15 @@
 
 - 🧙 **Setup Wizard** — Configuration guidée des équipes (nom, emoji, max joueurs, rôle Discord, heure de reset)
 - 📋 **Panneau interactif** — Embed dynamique avec boutons de sélection d'équipe
+- ⚔️ **Sous-rôles** — Sélection d'un sous-rôle (Tank, Healer, DPS...) après avoir rejoint une équipe, affiché dans l'embed
 - 🔄 **Gestion automatique des rôles** — Attribution/retrait automatique lors du clic
 - 👥 **Limite de joueurs** — Refus automatique si une équipe est complète
 - 🚪 **Quitter une équipe** — Bouton dédié pour se retirer
 - ⏰ **Reset automatique** — Suppression des rôles tous les jours à l'heure configurée
 - 🔁 **Mise à jour en temps réel** — L'embed se met à jour à chaque changement
+- 💬 **Messages éphémères auto-supprimés** — Les confirmations disparaissent automatiquement après 3 secondes
 - 🌐 **Multilingue** — Support EN/FR via `/set-language`, extensible à d'autres langues
-- 💾 **Persistance** — Configuration sauvegardée dans `data/config.json` (volume Docker)
+- 💾 **Persistance** — Configuration et sous-rôles membres sauvegardés (volume Docker)
 - 🐳 **Docker ready** — Image légère Alpine, déploiement simple via `docker compose`
 
 ---
@@ -56,6 +59,7 @@ teamforge-bot/
 │   │   ├── ping.js               # Test de connectivité
 │   │   ├── setup-wizard.js       # Configuration guidée des équipes
 │   │   ├── setup-teams.js        # Envoi du panneau de sélection
+│   │   ├── set-roles.js          # Configuration des sous-rôles
 │   │   ├── set-reset-time.js     # Modification de l'heure de reset
 │   │   ├── set-language.js       # Changement de langue du bot
 │   │   ├── reset-teams.js        # Reset manuel des équipes
@@ -67,12 +71,14 @@ teamforge-bot/
 │   │   ├── commandHandler.js     # Chargement automatique des commandes
 │   │   ├── eventHandler.js       # Chargement automatique des événements
 │   │   ├── wizardHandler.js      # Logique du setup wizard
-│   │   └── teamHandler.js        # Logique de sélection d'équipe
+│   │   ├── teamHandler.js        # Logique de sélection d'équipe
+│   │   ├── setRolesHandler.js    # Logique du wizard /set-roles
+│   │   └── subRoleHandler.js     # Logique de sélection de sous-rôle
 │   ├── locales/
 │   │   ├── en.js                 # Traductions anglaises
 │   │   └── fr.js                 # Traductions françaises
 │   ├── services/
-│   │   ├── configService.js      # Lecture/écriture de data/config.json
+│   │   ├── configService.js      # Lecture/écriture config.json + memberRoles.json
 │   │   ├── wizardService.js      # Sessions wizard en mémoire
 │   │   └── cronService.js        # Gestion du cron de reset
 │   └── utils/
@@ -82,7 +88,8 @@ teamforge-bot/
 ├── scripts/
 │   └── deploy-commands.js        # Déploiement des slash commands
 ├── data/                         # Volume Docker — données persistantes
-│   └── config.json               # Configuration des équipes (auto-généré)
+│   ├── config.json               # Configuration des équipes (auto-généré)
+│   └── memberRoles.json          # Sous-rôles choisis par les membres (auto-généré)
 ├── .env                          # Variables d'environnement (ne pas commit)
 ├── .env.example                  # Template des variables
 ├── .gitignore
@@ -102,6 +109,7 @@ teamforge-bot/
 |---|---|
 | `/setup-wizard` | Lance le wizard de configuration des équipes |
 | `/setup-teams` | Envoie le panneau de sélection dans le salon courant |
+| `/set-roles` | Configure les sous-rôles (Tank, Healer, DPS...) |
 | `/set-reset-time` | Modifie l'heure du reset automatique sans refaire le wizard |
 | `/set-language` | Change la langue du bot (`en` / `fr`) |
 | `/reset-teams` | Retire manuellement tous les rôles Team de tous les membres |
@@ -111,7 +119,8 @@ teamforge-bot/
 
 | Bouton | Description |
 |---|---|
-| `[Emoji] Nom de l'équipe` | Rejoindre une équipe |
+| `[Emoji] Nom de l'équipe` | Rejoindre une équipe → affiche la sélection de sous-rôle |
+| `[Emoji] Nom du sous-rôle` | Choisir son sous-rôle (affiché dans l'embed) |
 | `🚪 Leave my team / Quitter mon équipe` | Se retirer de son équipe |
 
 ### Commandes utilitaires
@@ -134,8 +143,6 @@ GUILD_ID=ton_guild_id
 
 ### Structure de `data/config.json`
 
-Généré automatiquement par le `/setup-wizard` :
-
 ```json
 {
   "teams": [
@@ -144,6 +151,14 @@ Généré automatiquement par le `/setup-wizard` :
       "name": "Team 1",
       "emoji": "🔴",
       "maxPlayers": 6,
+      "roleId": "123456789012345678"
+    }
+  ],
+  "subRoles": [
+    {
+      "id": 1,
+      "name": "Tank",
+      "emoji": "🛡️",
       "roleId": "123456789012345678"
     }
   ],
@@ -157,11 +172,8 @@ Généré automatiquement par le `/setup-wizard` :
 | Champ | Description |
 |---|---|
 | `teams` | Liste des équipes configurées |
-| `teams[].id` | Identifiant unique de l'équipe |
-| `teams[].name` | Nom de l'équipe |
-| `teams[].emoji` | Emoji affiché sur le bouton |
-| `teams[].maxPlayers` | Nombre maximum de joueurs (1–99) |
-| `teams[].roleId` | ID du rôle Discord associé |
+| `subRoles` | Liste des sous-rôles disponibles |
+| `subRoles[].roleId` | Rôle Discord associé (optionnel) |
 | `resetTime` | Heure du reset quotidien (HH:MM, fuseau Europe/Paris) |
 | `language` | Langue active (`en` ou `fr`, défaut : `en`) |
 | `setupMessageId` | ID du message du panneau actif |
@@ -169,53 +181,60 @@ Généré automatiquement par le `/setup-wizard` :
 
 ---
 
+## ⚔️ Sous-rôles
+
+Les sous-rôles permettent à chaque membre de choisir sa spécialité au sein de son équipe (ex : Tank, Healer, DPS Ranged, DPS Melee). Le sous-rôle choisi est affiché sous forme d'emoji devant le pseudo du membre dans l'embed.
+
+### Fonctionnement
+
+```
+Membre clique sur [🔴 Team 1]
+  → Rejoint l'équipe
+  → Message éphémère : [🛡️ Tank] [💚 Healer] [🏹 DPS Ranged] [⚔️ DPS Melee]
+
+Membre clique sur [🛡️ Tank]
+  → "✅ You chose 🛡️ Tank!"  ← auto-supprimé après 3s
+  → L'embed se met à jour :
+      🔴 Team 1 (1/6)
+      🛡️ @Membre
+```
+
+### Comportements
+
+| Situation | Comportement |
+|---|---|
+| Membre clique à nouveau sur sa team | Réaffiche la sélection de sous-rôle |
+| Membre change de team | Sous-rôle réinitialisé, doit rechoisir |
+| Membre quitte l'équipe | Sous-rôle supprimé |
+| Reset automatique | Tous les sous-rôles effacés |
+| `/reset-teams` | Tous les sous-rôles effacés |
+
+### Configuration via `/set-roles`
+
+Wizard en 3 étapes :
+1. Nombre de sous-rôles (1 à 5)
+2. Nom + emoji de chaque sous-rôle
+3. Rôle Discord associé (optionnel)
+
+---
+
 ## 🌐 Internationalisation
-
-TeamForge supporte plusieurs langues via un système i18n intégré.
-
-### Langues disponibles
 
 | Code | Langue | Commande |
 |---|---|---|
 | `en` | 🇬🇧 English | `/set-language language:English` |
 | `fr` | 🇫🇷 Français | `/set-language language:Français` |
 
-### Fonctionnement
-
-La langue est sauvegardée dans `data/config.json` et persiste après redémarrage. Tous les messages du bot (embeds, boutons, réponses éphémères, modals) sont traduits automatiquement.
-
 ### Ajouter une nouvelle langue
 
-1. Créer `src/locales/de.js` (ou autre code langue) en copiant `en.js`
-2. Traduire toutes les valeurs
-3. Ajouter la langue dans `src/utils/i18n.js` :
+1. Créer `src/locales/de.js` en copiant `en.js` et traduire toutes les valeurs
+2. Ajouter dans `src/utils/i18n.js` :
 ```js
-const locales = {
-  en: require('../locales/en'),
-  fr: require('../locales/fr'),
-  de: require('../locales/de'), // ← ajouter ici
-};
+const locales = { en, fr, de: require('../locales/de') };
 ```
-4. Ajouter le choix dans `src/commands/set-language.js` :
+3. Ajouter le choix dans `src/commands/set-language.js` :
 ```js
-.addChoices(
-  { name: '🇬🇧 English',  value: 'en' },
-  { name: '🇫🇷 Français', value: 'fr' },
-  { name: '🇩🇪 Deutsch',  value: 'de' }, // ← ajouter ici
-)
-```
-
-### Utilisation dans le code
-
-```js
-const { t } = require('../utils/i18n');
-
-// Clé simple
-t('ping.title')  // → "🏓 Pong!" (EN) ou "🏓 Pong !" (FR)
-
-// Clé avec variables
-t('teamHandler.joinSuccess', { emoji: '🔴', name: 'Team 1' })
-// → "✅ You joined **🔴 Team 1**!"
+{ name: '🇩🇪 Deutsch', value: 'de' }
 ```
 
 ---
@@ -225,28 +244,20 @@ t('teamHandler.joinSuccess', { emoji: '🔴', name: 'Team 1' })
 ### Premier démarrage
 
 ```
-1. /setup-wizard      → Configurer les équipes + heure de reset
-2. /set-language      → Choisir la langue (optionnel, défaut EN)
-3. /setup-teams       → Envoyer le panneau dans un salon
-4. Les membres cliquent sur les boutons pour rejoindre une équipe
+1. /setup-wizard   → Configurer les équipes + heure de reset
+2. /set-roles      → Configurer les sous-rôles (optionnel)
+3. /set-language   → Choisir la langue (optionnel, défaut EN)
+4. /setup-teams    → Envoyer le panneau dans un salon
 ```
 
 ### Modifier uniquement l'heure de reset
-
 ```
-/set-reset-time  → Saisir la nouvelle heure HH:MM
-```
-
-### Changer la langue
-
-```
-/set-language → Choisir EN ou FR
+/set-reset-time → Saisir la nouvelle heure HH:MM
 ```
 
-### Reconfigurer les équipes
-
+### Reconfigurer les sous-rôles
 ```
-/setup-wizard  → Détecte la config existante → demande confirmation
+/set-roles → Détecte la config existante → demande confirmation
 ```
 
 ---
@@ -261,71 +272,61 @@ Discord
   ▼
 interactionCreate.js  (router)
   │
-  ├── isChatInputCommand()      →  commandHandler  →  commands/*.js
+  ├── isChatInputCommand()       → commandHandler → commands/*.js
   │
-  ├── customId: "wizard_*"      →  wizardHandler.js
-  │     ├── Boutons (count, edit_team, confirm, cancel...)
-  │     ├── Modals (count, team config, reset time)
-  │     └── RoleSelectMenu (rôle par équipe)
+  ├── customId: "wizard_*"       → wizardHandler.js
   │
-  ├── customId: "team_*"        →  teamHandler.js
-  │     ├── team_1, team_2...   →  handleJoin()
-  │     └── team_leave          →  handleLeave()
+  ├── customId: "setroles_*"     → setRolesHandler.js
   │
-  ├── customId: "setup_teams_modal"    →  envoi du panneau
-  └── customId: "set_reset_time_modal" →  mise à jour du cron
+  ├── customId: "team_*"         → teamHandler.js
+  │     ├── team_1, team_2...    → handleJoin() → buildSubRolePayload()
+  │     └── team_leave           → handleLeave()
+  │
+  ├── customId: "subrole_*"      → subRoleHandler.js
+  │     └── subrole_1, 2...      → handle() → setMemberSubRole() → deleteReply() après 3s
+  │
+  ├── setup_teams_modal          → envoi du panneau
+  └── set_reset_time_modal       → mise à jour du cron
 ```
 
-### Système i18n
+### Messages éphémères auto-supprimés
 
 ```
-t('section.key', { var: value })
+deferReply({ Ephemeral })   ← rend le message supprimable
+editReply(content)          ← affiche la confirmation
+setTimeout(3000)
+  → deleteReply()           ← suppression automatique
+```
+
+### Gestion des sous-rôles membres
+
+```
+memberRoles.json : { "userId": subRoleId }
   │
-  ▼
-i18n.js
-  ├── getLang()          → lit config.language (défaut: 'en')
-  ├── locales[lang][key] → retourne la string traduite
-  ├── fallback EN        → si clé absente dans la langue active
-  └── replace {vars}     → injection des variables
+  ├── setMemberSubRole(userId, subRoleId)   ← choix d'un sous-rôle
+  ├── clearMemberSubRole(userId)            ← quitte la team
+  ├── clearAllMemberSubRoles()              ← reset quotidien
+  └── getMemberSubRoleEmoji(userId, list)   ← emoji dans l'embed
 ```
-
-### Gestion du cache membres
-
-Pour éviter les rate limits Discord :
-- `guild.members.fetch()` appelé **une seule fois** si `cache.size <= 1`
-- Les refreshs suivants utilisent **uniquement le cache**
-
-### Disposition des boutons
-
-L'algorithme répartit automatiquement les boutons sur plusieurs lignes :
-
-| Nombre d'équipes | Disposition |
-|---|---|
-| 1–5 | 1 ligne |
-| 6–8 | 2 lignes de 3–4 |
-| 9–12 | 3 lignes de 3–4 |
-
-Maximum Discord : 5 boutons × 4 lignes (la 5ème est réservée au bouton Quitter) = 20 équipes max.
 
 ---
 
 ## 💾 Données persistantes
 
-Les données sont stockées dans `data/config.json`, monté comme **volume Docker** :
-
-```yaml
-volumes:
-  - teamforge_data:/app/data
-```
-
-✅ Les données survivent aux redémarrages et rebuilds du container.
+| Fichier | Contenu | Effacé au reset |
+|---|---|---|
+| `data/config.json` | Équipes, sous-rôles, heure reset, langue | ❌ Non |
+| `data/memberRoles.json` | Sous-rôle choisi par chaque membre | ✅ Oui |
 
 ```bash
-# Sauvegarder la config
+# Sauvegarder
 docker cp teamforge:/app/data/config.json ./config_backup.json
+docker cp teamforge:/app/data/memberRoles.json ./memberRoles_backup.json
 
-# Restaurer la config
+# Restaurer
 docker cp ./config_backup.json teamforge:/app/data/config.json
+docker cp ./memberRoles_backup.json teamforge:/app/data/memberRoles.json
+docker restart teamforge
 ```
 
 ---
@@ -344,7 +345,6 @@ Format : `[YYYY-MM-DD HH:MM:SS] LEVEL | Message`
 | EVENT | 📡 | Événements Discord |
 
 ```bash
-# Voir les logs en temps réel
 docker logs -f teamforge
 ```
 
@@ -354,10 +354,10 @@ docker logs -f teamforge
 
 | Permission | Raison |
 |---|---|
-| `Manage Roles` | Attribuer/retirer les rôles Team |
+| `Manage Roles` | Attribuer/retirer les rôles Team et sous-rôles |
 | `Send Messages` | Envoyer les embeds |
 | `Embed Links` | Afficher les embeds |
 | `Read Message History` | Retrouver le message au redémarrage |
 | `View Channels` | Voir les salons |
 
-> ⚠️ Le rôle **TeamForge** doit être placé **au-dessus** des rôles Team dans la hiérarchie du serveur.
+> ⚠️ Le rôle **TeamForge** doit être placé **au-dessus** des rôles Team ET des rôles sous-rôles dans la hiérarchie du serveur.
