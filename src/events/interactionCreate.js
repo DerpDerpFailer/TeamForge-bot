@@ -2,6 +2,8 @@ const { Events, MessageFlags }              = require('discord.js');
 const logger                                 = require('../utils/logger');
 const wizardHandler                          = require('../handlers/wizardHandler');
 const teamHandler                            = require('../handlers/teamHandler');
+const setRolesHandler                        = require('../handlers/setRolesHandler');
+const subRoleHandler                         = require('../handlers/subRoleHandler');
 const { buildTeamButtons, buildTeamsEmbed }  = require('../utils/teamEmbed');
 const { getConfig, saveSetupMessage, saveConfig } = require('../services/configService');
 const { startCron }                          = require('../services/cronService');
@@ -123,6 +125,21 @@ module.exports = {
       return interaction.editReply({ content: t('setResetTime.success', { time: raw }) });
     }
 
+    // ── Interactions /set-roles ──────────────────────────────────────────────
+    if (customId.startsWith('setroles_')) {
+      try {
+        await setRolesHandler.handle(interaction);
+      } catch (err) {
+        logger.error(`Error setRolesHandler [${customId}]: ${err.message}`);
+        const msg = { content: t('general.error'), flags: MessageFlags.Ephemeral };
+        try {
+          if (interaction.replied || interaction.deferred) await interaction.followUp(msg);
+          else await interaction.reply(msg);
+        } catch (_) { /* expired */ }
+      }
+      return;
+    }
+
     // ── Interactions du wizard ───────────────────────────────────────────────
     if (customId.startsWith('wizard_')) {
       if (interaction.isButton() && customId === 'wizard_reset_time_open_modal') {
@@ -140,17 +157,14 @@ module.exports = {
         logger.error(`Error wizard [${customId}]: ${err.message}`);
         const msg = { content: t('general.error'), flags: MessageFlags.Ephemeral };
         try {
-          if (interaction.replied || interaction.deferred) {
-            await interaction.followUp(msg);
-          } else {
-            await interaction.reply(msg);
-          }
+          if (interaction.replied || interaction.deferred) await interaction.followUp(msg);
+          else await interaction.reply(msg);
         } catch (_) { /* expired */ }
       }
       return;
     }
 
-    // ── Boutons des équipes ──────────────────────────────────────────────────
+    // ── Boutons des équipes (team_X / team_leave) ────────────────────────────
     if (interaction.isButton() && customId.startsWith('team_')) {
       try {
         await teamHandler.handle(interaction);
@@ -158,11 +172,23 @@ module.exports = {
         logger.error(`Error teamHandler [${customId}]: ${err.message}`);
         const msg = { content: t('general.error'), flags: MessageFlags.Ephemeral };
         try {
-          if (interaction.replied || interaction.deferred) {
-            await interaction.followUp(msg);
-          } else {
-            await interaction.reply(msg);
-          }
+          if (interaction.replied || interaction.deferred) await interaction.followUp(msg);
+          else await interaction.reply(msg);
+        } catch (_) { /* expired */ }
+      }
+      return;
+    }
+
+    // ── Boutons des sous-rôles (subrole_X) ───────────────────────────────────
+    if (interaction.isButton() && customId.startsWith('subrole_')) {
+      try {
+        await subRoleHandler.handle(interaction);
+      } catch (err) {
+        logger.error(`Error subRoleHandler [${customId}]: ${err.message}`);
+        const msg = { content: t('general.error'), flags: MessageFlags.Ephemeral };
+        try {
+          if (interaction.replied || interaction.deferred) await interaction.followUp(msg);
+          else await interaction.reply(msg);
         } catch (_) { /* expired */ }
       }
       return;

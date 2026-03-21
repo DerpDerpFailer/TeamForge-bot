@@ -1,6 +1,7 @@
 const { MessageFlags }                      = require('discord.js');
 const { getConfig }                         = require('../services/configService');
 const { buildTeamButtons, buildTeamsEmbed } = require('../utils/teamEmbed');
+const { buildSubRolePayload }               = require('./subRoleHandler');
 const { t }                                 = require('../utils/i18n');
 const logger                                = require('../utils/logger');
 
@@ -24,13 +25,19 @@ async function handleJoin(interaction) {
   const guild  = interaction.guild;
   const member = interaction.member;
 
+  // ── Membre déjà dans cette team → réafficher la sélection de sous-rôle ───
   if (member.roles.cache.has(team.roleId)) {
-    return interaction.reply({
-      content: t('teamHandler.alreadyInTeam', { emoji: team.emoji, name: team.name }),
-      flags:   MessageFlags.Ephemeral,
-    });
+    const subRolePayload = buildSubRolePayload(team);
+
+    // Si pas de sous-rôles configurés, message simple
+    if (!subRolePayload.embeds) {
+      return interaction.reply(subRolePayload);
+    }
+
+    return interaction.reply(subRolePayload);
   }
 
+  // ── Récupérer le rôle depuis le cache ────────────────────────────────────
   const role = guild.roles.cache.get(team.roleId)
             ?? await guild.roles.fetch(team.roleId).catch(() => null);
 
@@ -41,6 +48,7 @@ async function handleJoin(interaction) {
     });
   }
 
+  // ── Vérifier si la team est pleine ──────────────────────────────────────
   const currentCount = role.members.size;
 
   if (currentCount >= team.maxPlayers) {
@@ -50,8 +58,11 @@ async function handleJoin(interaction) {
     });
   }
 
-  const teamRoleIds   = config.teams.map(t => t.roleId).filter(Boolean);
-  const rolesToRemove = member.roles.cache.filter(r => teamRoleIds.includes(r.id));
+  // ── Retirer tous les anciens rôles Team ET sous-rôles ────────────────────
+  const teamRoleIds    = config.teams.map(t => t.roleId).filter(Boolean);
+  const subRoleIds     = (config.subRoles ?? []).map(r => r.roleId).filter(Boolean);
+  const allRoleIds     = [...teamRoleIds, ...subRoleIds];
+  const rolesToRemove  = member.roles.cache.filter(r => allRoleIds.includes(r.id));
 
   if (rolesToRemove.size > 0) {
     await member.roles.remove(rolesToRemove).catch(err => {
@@ -59,6 +70,7 @@ async function handleJoin(interaction) {
     });
   }
 
+  // ── Ajouter le nouveau rôle Team ──────────────────────────────────────────
   try {
     await member.roles.add(team.roleId);
   } catch (err) {
@@ -71,36 +83,39 @@ async function handleJoin(interaction) {
 
   logger.success(t('teamHandler.logJoined', { user: member.user.tag, emoji: team.emoji, name: team.name }));
 
+  // ── Mettre à jour le panneau ──────────────────────────────────────────────
   await refreshSetupMessage(guild, config);
 
-  return interaction.reply({
-    content: t('teamHandler.joinSuccess', { emoji: team.emoji, name: team.name }),
-    flags:   MessageFlags.Ephemeral,
-  });
+  // ── Afficher la sélection de sous-rôle ───────────────────────────────────
+  const subRolePayload = buildSubRolePayload(team);
+  return interaction.reply(subRolePayload);
 }
 
 async function handleLeave(interaction) {
   const config        = getConfig();
   const member        = interaction.member;
   const guild         = interaction.guild;
-  const teamRoleIds   = config.teams.map(t => t.roleId).filter(Boolean);
-  const rolesToRemove = member.roles.cache.filter(r => teamRoleIds.includes(r.id));
 
-  if (rolesToRemove.size === 0) {
+  const teamRoleIds   = config.teams.map(t => t.roleId).filter(Boolean);
+  const subRoleIds    = (config.subRoles ?? []).map(r => r.roleId).filter(Boolean);
+  const allRoleIds    = [...teamRoleIds, ...subRoleIds];
+  const rolesToRemove = member.roles.cache.filter(r => allRoleIds.includes(r.id));
+
+  if (!member.roles.cache.some(r => teamRoleIds.includes(r.id))) {
     return interaction.reply({
       content: t('teamHandler.leaveNoTeam'),
       flags:   MessageFlags.Ephemeral,
     });
   }
 
-  const removedRole = rolesToRemove.first();
-  const team        = config.teams.find(t => t.roleId === removedRole.id);
-  const teamLabel   = team ? `**${team.emoji} ${team.name}**` : `**${removedRole.name}**`;
+  const removedTeamRole = member.roles.cache.find(r => teamRoleIds.includes(r.id));
+  const team            = config.teams.find(t => t.roleId === removedTeamRole?.id);
+  const teamLabel       = team ? `**${team.emoji} ${team.name}**` : `**${removedTeamRole?.name}**`;
 
   try {
     await member.roles.remove(rolesToRemove);
   } catch (err) {
-    logger.error(`Unable to remove role from ${member.user.tag}: ${err.message}`);
+    logger.error(`Unable to remove roles from ${member.user.tag}: ${err.message}`);
     return interaction.reply({
       content: t('teamHandler.leaveRoleError'),
       flags:   MessageFlags.Ephemeral,
